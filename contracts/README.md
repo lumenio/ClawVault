@@ -1,66 +1,43 @@
-## Foundry
+# ClawVault Contracts
 
-**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
+ERC-4337 smart wallet with P-256 signature verification, on-chain spending caps, and recovery module.
 
-Foundry consists of:
+## Contracts
 
-- **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
-- **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
-- **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
-- **Chisel**: Fast, utilitarian, and verbose solidity REPL.
+| Contract | Description |
+|---|---|
+| `ClawVaultWallet.sol` | Core wallet. Single P-256 owner, `validateUserOp` with precompile/fallback sig verification, daily spending caps, freeze/recovery. |
+| `ClawVaultFactory.sol` | CREATE2 deterministic deployment. ERC-4337 `initCode` compatible. |
+| `P256Verifier.sol` | Wrapper that tries the precompile at `0x100` first (EIP-7951 / RIP-7212), falls back to Daimo's `P256Verifier`. |
 
-## Documentation
+## Build
 
-https://book.getfoundry.sh/
-
-## Usage
-
-### Build
-
-```shell
-$ forge build
+```bash
+forge build
 ```
 
-### Test
+## Test
 
-```shell
-$ forge test
+```bash
+forge test          # 48 tests
+forge test -vvv     # verbose
+forge test --match-test test_SpendingCap  # run specific tests
 ```
 
-### Format
+## Dependencies
 
-```shell
-$ forge fmt
-```
+Installed via `forge install`:
 
-### Gas Snapshots
+- `eth-infinitism/account-abstraction` -- ERC-4337 v0.7 EntryPoint interfaces
+- `daimo-eth/p256-verifier` -- P-256 signature verification fallback
+- `OpenZeppelin/openzeppelin-contracts` -- Utilities
+- `foundry-rs/forge-std` -- Test framework
 
-```shell
-$ forge snapshot
-```
+## Key Design Decisions
 
-### Anvil
-
-```shell
-$ anvil
-```
-
-### Deploy
-
-```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
-```
-
-### Cast
-
-```shell
-$ cast <subcommand>
-```
-
-### Help
-
-```shell
-$ forge --help
-$ anvil --help
-$ cast --help
-```
+- **Raw r||s signatures** (64 bytes) -- no DER encoding
+- **Low-S enforced on-chain** -- rejects signatures where `s > n/2`
+- **No paymasters** -- `paymasterAndData` must always be empty
+- **Spending caps track both `transfer()` and `transferFrom()`** -- prevents bypass via transferFrom
+- **Stablecoins by (chainId, address)** -- never by symbol string
+- **Recovery auto-freezes** -- key rotation triggers immediate freeze + 48h timelock

@@ -90,7 +90,8 @@ struct SetupHandler {
                 chainId: chainIdValue,
                 profile: resolvedProfile,
                 recoveryAddress: recoveryAddress,
-                precompileAvailable: precompileAvailable
+                precompileAvailable: precompileAvailable,
+                chainClient: probeClient
             )
         } catch {
             return .error(500, "Failed to compute wallet address: \(error.localizedDescription)")
@@ -237,7 +238,8 @@ struct SetupHandler {
         chainId: UInt64,
         profile: SecurityProfile,
         recoveryAddress: String?,
-        precompileAvailable: Bool
+        precompileAvailable: Bool,
+        chainClient: ChainClient
     ) async throws -> String {
         // Call factory.getAddress(signerX, signerY, recoveryAddress, dailyCap, dailyStablecoinCap,
         //   stablecoins, stablecoinDecs, usePrecompile, salt)
@@ -297,7 +299,7 @@ struct SetupHandler {
             calldata += String(repeating: "0", count: 64 - decHex.count) + decHex
         }
 
-        let result = try await services.chainClient.ethCall(to: factoryAddress, data: calldata)
+        let result = try await chainClient.ethCall(to: factoryAddress, data: calldata)
 
         // Result is a 32-byte address (padded)
         guard let resultData = SignatureUtils.fromHex(result), resultData.count >= 32 else {

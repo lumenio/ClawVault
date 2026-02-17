@@ -93,9 +93,14 @@ actor ChainClient {
         }
 
         // Read amountOut from first 32 bytes (big-endian uint256 → UInt64)
+        // Overflow detection: if high bytes (0-24) are non-zero, return UInt64.max
+        // so spending limit checks always trigger (safe default)
+        let highBytes = resultData[0..<24]
+        if highBytes.contains(where: { $0 != 0 }) {
+            return UInt64.max
+        }
         var amountOut: UInt64 = 0
-        let start = max(0, 32 - 8)
-        for i in start..<32 {
+        for i in 24..<32 {
             amountOut = (amountOut << 8) | UInt64(resultData[i])
         }
         return amountOut

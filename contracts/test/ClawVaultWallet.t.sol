@@ -358,14 +358,14 @@ contract ClawVaultWalletTest is Test {
         assertEq(wallet.isValidSignature(hash, hex"aabb"), bytes4(0xffffffff));
     }
 
-    // ─── Self-Call Admin ──────────────────────────────────────────────────
-    function test_SetDailyCapOnlySelf() public {
-        vm.expectRevert(ClawVaultWallet.OnlySelf.selector);
+    // ─── Spending Cap Admin (Recovery-Only) ────────────────────────────
+    function test_SetDailyCapRejectsDirectCall() public {
+        vm.expectRevert(ClawVaultWallet.OnlyRecovery.selector);
         wallet.setDailyCap(2 ether);
     }
 
-    function test_SetStablecoinOnlySelf() public {
-        vm.expectRevert(ClawVaultWallet.OnlySelf.selector);
+    function test_SetStablecoinRejectsDirectCall() public {
+        vm.expectRevert(ClawVaultWallet.OnlyRecovery.selector);
         wallet.setStablecoin(address(0x1234), true);
     }
 
@@ -452,19 +452,33 @@ contract ClawVaultWalletTest is Test {
         wallet.initiateKeyRotation(NEW_SIGNER_X, 0);
     }
 
-    // ─── Self-Call Admin Functions ────────────────────────────────────────
-    function test_SetDailyCapViaSelfCall() public {
+    // ─── Self-Call Cannot Modify Caps (Recovery-Only) ──────────────────
+    function test_SetDailyCapViaSelfCallReverts() public {
         bytes memory callData = abi.encodeWithSelector(ClawVaultWallet.setDailyCap.selector, 2 ether);
         vm.prank(address(mockEntryPoint));
+        vm.expectRevert();
         wallet.execute(address(wallet), 0, callData);
-        assertEq(wallet.dailySpendingCap(), 2 ether);
     }
 
-    function test_SetStablecoinViaSelfCall() public {
+    function test_SetStablecoinViaSelfCallReverts() public {
         address newStable = address(0x5555);
         bytes memory callData = abi.encodeWithSelector(ClawVaultWallet.setStablecoin.selector, newStable, true);
         vm.prank(address(mockEntryPoint));
+        vm.expectRevert();
         wallet.execute(address(wallet), 0, callData);
+    }
+
+    // ─── Recovery Address Can Modify Caps ────────────────────────────────
+    function test_SetDailyCapByRecovery() public {
+        vm.prank(RECOVERY_ADDR);
+        wallet.setDailyCap(2 ether);
+        assertEq(wallet.dailySpendingCap(), 2 ether);
+    }
+
+    function test_SetStablecoinByRecovery() public {
+        address newStable = address(0x5555);
+        vm.prank(RECOVERY_ADDR);
+        wallet.setStablecoin(newStable, true);
         assertTrue(wallet.knownStablecoins(newStable));
     }
 

@@ -77,6 +77,20 @@ struct ProtocolRegistry {
         }
     }
 
+    /// Get all protocol names and addresses for a given chain.
+    func protocols(forChain chainId: UInt64) -> [[String: String]] {
+        var seen = Set<String>()
+        var result: [[String: String]] = []
+        for action in allowedActions where action.protocol_.chainId == chainId {
+            let key = action.protocol_.address
+            if !seen.contains(key) {
+                seen.insert(key)
+                result.append(["name": action.protocol_.name, "address": action.protocol_.address])
+            }
+        }
+        return result
+    }
+
     func protocolName(chainId: UInt64, address: String) -> String? {
         let addrLower = address.lowercased()
         return allowedActions.first { $0.protocol_.chainId == chainId && $0.protocol_.address == addrLower }?

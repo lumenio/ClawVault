@@ -143,3 +143,42 @@ export async function runSetupWizard() {
 
   return result;
 }
+
+/**
+ * Initialize the wallet with chain and profile configuration.
+ * Calls POST /setup on the daemon.
+ *
+ * @param {object} params - { chainId: number, profile: string }
+ * @returns {Promise<object>} Setup result with walletAddress, precompileAvailable, etc.
+ */
+export async function initializeWallet(params) {
+  const { chainId, profile } = params;
+  if (!chainId || !profile) {
+    throw new Error('chainId and profile are required');
+  }
+
+  const response = await daemon.setup({ chainId, profile });
+  if (response.status !== 200) {
+    throw new Error(
+      response.data?.error || `Setup failed with status ${response.status}`
+    );
+  }
+  return response.data;
+}
+
+/**
+ * Deploy the wallet on-chain.
+ * Requires the wallet to be funded first.
+ * Calls POST /setup/deploy on the daemon.
+ *
+ * @returns {Promise<object>} Deploy result with walletAddress, userOpHash, etc.
+ */
+export async function deployWallet() {
+  const response = await daemon.setupDeploy();
+  if (response.status !== 200) {
+    throw new Error(
+      response.data?.error || `Deploy failed with status ${response.status}`
+    );
+  }
+  return response.data;
+}

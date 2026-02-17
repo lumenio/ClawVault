@@ -112,6 +112,14 @@ export class DaemonClient {
   async allowlistUpdate(changes) {
     return this.request('POST', '/allowlist', changes);
   }
+
+  async setup(params) {
+    return this.request('POST', '/setup', params);
+  }
+
+  async setupDeploy() {
+    return this.request('POST', '/setup/deploy');
+  }
 }
 
 /**

@@ -229,15 +229,19 @@ contract ClawVaultWallet is IAccount {
         // Does NOT auto-unfreeze — unfreezing is a separate, explicit action
     }
 
-    // ─── Spending Cap Admin (via self-call through UserOp) ────────────────────
-    /// @notice Update the daily spending cap. Only callable via self-call (UserOp from signer).
-    function setDailyCap(uint256 newCap) external onlySelf {
+    // ─── Spending Cap Admin (recovery-only — independent of signing key) ──────
+    /// @notice Update the daily spending cap. Only callable by recovery address.
+    /// @dev Uses onlyRecovery (not onlySelf) so the signing key cannot raise caps
+    ///      to infinity — the on-chain cap is a true backstop independent of the daemon.
+    function setDailyCap(uint256 newCap) external onlyRecovery {
         dailySpendingCap = newCap;
         emit DailyCapUpdated(newCap);
     }
 
-    /// @notice Update stablecoin registry. Only callable via self-call (UserOp from signer).
-    function setStablecoin(address token, bool status) external onlySelf {
+    /// @notice Update stablecoin registry. Only callable by recovery address.
+    /// @dev Uses onlyRecovery (not onlySelf) so the signing key cannot manipulate
+    ///      which tokens are tracked for spending caps.
+    function setStablecoin(address token, bool status) external onlyRecovery {
         knownStablecoins[token] = status;
         emit StablecoinUpdated(token, status);
     }

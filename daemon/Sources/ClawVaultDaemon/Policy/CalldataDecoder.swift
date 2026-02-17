@@ -172,8 +172,17 @@ struct CalldataDecoder {
     }
 
     static func dataToUInt64(_ data: Data) -> UInt64 {
-        // Take the last 8 bytes (big-endian) for uint256 → UInt64 conversion
+        // Take the last 8 bytes (big-endian) for uint256 → UInt64 conversion.
+        // Overflow detection: if any of the high bytes (0-24) are non-zero,
+        // the value exceeds UInt64.max. Return UInt64.max as sentinel so
+        // spending limit checks always trigger (safe default).
         let bytes = Array(data)
+        if bytes.count > 8 {
+            let highBytes = bytes[0..<(bytes.count - 8)]
+            if highBytes.contains(where: { $0 != 0 }) {
+                return UInt64.max
+            }
+        }
         var value: UInt64 = 0
         let start = max(0, bytes.count - 8)
         for i in start..<bytes.count {
@@ -190,6 +199,9 @@ struct CalldataDecoder {
         let tokenOut: String      // Output token address (lowercase hex)
         let fee: UInt32           // Pool fee tier (e.g., 500, 3000)
         let isMultiHop: Bool      // true if path has more than 2 tokens
+        let recipient: String     // Recipient address from V3_SWAP_EXACT_IN input
+        let payerIsUser: Bool     // Whether the payer is the user (vs router)
+        let commands: [UInt8]     // All command bytes in the execute() call
     }
 
     /// Uniswap Universal Router command bytes.
@@ -242,6 +254,10 @@ struct CalldataDecoder {
             // Decode V3_SWAP_EXACT_IN: (address recipient, uint256 amountIn, uint256 amountOutMin, bytes path, bool payerIsUser)
             guard inputData.count >= 160 else { return nil } // 5 * 32 bytes minimum
 
+            // Extract recipient address (first 32 bytes, address in lower 20 bytes)
+            let recipientBytes = inputData[12..<32] // skip 12 zero-padding bytes
+            let recipient = "0x" + recipientBytes.map { String(format: "%02x", $0) }.joined()
+
             let amountIn = readUInt256AsUInt64(inputData, offset: 32)
             let amountOutMin = readUInt256AsUInt64(inputData, offset: 64)
             let pathOffset = readUInt256AsInt(inputData, offset: 96)
@@ -259,13 +275,24 @@ struct CalldataDecoder {
             let fee = UInt32(pathData[20]) << 16 | UInt32(pathData[21]) << 8 | UInt32(pathData[22])
             let tokenOut = "0x" + pathData[23..<43].map { String(format: "%02x", $0) }.joined()
 
+            // Extract payerIsUser (offset 128 = 4th field, bool in last byte)
+            let payerIsUser: Bool
+            if inputData.count >= 160 {
+                payerIsUser = inputData[159] != 0
+            } else {
+                payerIsUser = true // safe default
+            }
+
             return SwapParams(
                 amountIn: amountIn,
                 amountOutMin: amountOutMin,
                 tokenIn: tokenIn,
                 tokenOut: tokenOut,
                 fee: fee,
-                isMultiHop: pathData.count > 43
+                isMultiHop: pathData.count > 43,
+                recipient: recipient,
+                payerIsUser: payerIsUser,
+                commands: commands
             )
         }
 
@@ -283,8 +310,14 @@ struct CalldataDecoder {
     }
 
     /// Read a big-endian uint256 from Data and return as UInt64.
+    /// Returns UInt64.max if value overflows (safe sentinel for spending checks).
     private static func readUInt256AsUInt64(_ data: Data, offset: Int) -> UInt64 {
         guard offset + 32 <= data.count else { return 0 }
+        // Overflow detection: if any of the high bytes (offset..<offset+24) are non-zero
+        let highSlice = data[offset..<(offset + 24)]
+        if highSlice.contains(where: { $0 != 0 }) {
+            return UInt64.max
+        }
         let slice = data[(offset + 24)..<(offset + 32)]
         var value: UInt64 = 0
         for byte in slice { value = (value << 8) | UInt64(byte) }

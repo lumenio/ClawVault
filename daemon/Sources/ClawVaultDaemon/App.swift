@@ -51,6 +51,14 @@ struct ClawVaultDaemon {
         let bundlerURL = config.customBundlerURL ?? chainConfig.bundlerURL
         let bundlerClient = BundlerClient(bundlerURL: bundlerURL)
 
+        // Probe P-256 precompile at 0x100 and cache result
+        if config.precompileAvailable == nil {
+            let precompileAvailable = await PrecompileProbe.probe(chainClient: chainClient)
+            config.precompileAvailable = precompileAvailable
+            try? config.save()
+            print("[ClawVault] Precompile probe: \(precompileAvailable ? "available" : "not available")")
+        }
+
         // Initialize policy engine
         let profile = SecurityProfile.forName(config.activeProfile) ?? .balanced
         let stablecoinRegistry = StablecoinRegistry()
@@ -61,7 +69,8 @@ struct ClawVaultDaemon {
             stablecoinRegistry: stablecoinRegistry,
             frozen: config.frozen,
             chainClient: chainClient,
-            chainId: config.homeChainId
+            chainId: config.homeChainId,
+            walletAddress: config.walletAddress
         )
 
         // Initialize other components
@@ -92,7 +101,8 @@ struct ClawVaultDaemon {
         let capsHandler = CapabilitiesHandler(
             config: config,
             policyEngine: policyEngine,
-            chainClient: chainClient
+            chainClient: chainClient,
+            protocolRegistry: protocolRegistry
         )
         router.register("GET", "/capabilities") { req in
             await capsHandler.handle(request: req)
@@ -135,6 +145,22 @@ struct ClawVaultDaemon {
         }
         router.register("POST", "/policy/update") { req in
             await policyHandler.handleUpdate(request: req)
+        }
+
+        // Setup
+        let setupHandler = SetupHandler(
+            seManager: seManager,
+            chainClient: chainClient,
+            bundlerClient: bundlerClient,
+            userOpBuilder: userOpBuilder,
+            auditLogger: auditLogger,
+            config: config
+        )
+        router.register("POST", "/setup") { req in
+            await setupHandler.handleSetup(request: req)
+        }
+        router.register("POST", "/setup/deploy") { req in
+            await setupHandler.handleDeploy(request: req)
         }
 
         // Allowlist

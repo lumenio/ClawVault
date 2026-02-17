@@ -5,6 +5,7 @@ struct CapabilitiesHandler {
     let config: DaemonConfig
     let policyEngine: PolicyEngine
     let chainClient: ChainClient
+    let protocolRegistry: ProtocolRegistry
 
     func handle(request: HTTPRequest) async -> HTTPResponse {
         guard let walletAddress = config.walletAddress else {
@@ -18,6 +19,8 @@ struct CapabilitiesHandler {
             chainClient: chainClient
         )
         let isFrozen = await policyEngine.isFrozen
+        let allowlist = await policyEngine.currentAllowlist
+        let protocols = protocolRegistry.protocols(forChain: config.homeChainId)
 
         return .json(200, [
             "profile": profile.name,
@@ -31,10 +34,20 @@ struct CapabilitiesHandler {
                 "dailyEthCap": profile.dailyEthCap,
                 "maxTxPerHour": profile.maxTxPerHour,
                 "maxSlippageBps": profile.maxSlippageBps,
+                "minCooldownSeconds": profile.minCooldownSeconds,
             ],
             "remaining": [
                 "ethDaily": budgets.ethRemaining,
                 "stablecoinDaily": budgets.stablecoinRemaining,
+            ],
+            "allowlistedAddresses": Array(allowlist),
+            "protocols": protocols,
+            "autopilotEligible": [
+                "eth_transfer_allowlisted",
+                "stablecoin_transfer_allowlisted",
+                "uniswap_swap",
+                "aave_deposit",
+                "aave_withdraw",
             ],
         ] as [String: Any])
     }

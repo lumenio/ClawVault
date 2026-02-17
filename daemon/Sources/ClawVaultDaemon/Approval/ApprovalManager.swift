@@ -5,6 +5,7 @@ actor ApprovalManager {
     struct PendingApproval {
         let code: String
         let approvalHash: Data
+        let intentHash: Data    // Hash of intent fields only (chainId, wallet, target, value, calldata)
         let summary: String
         let createdAt: Date
         let expiresAt: Date
@@ -44,9 +45,19 @@ actor ApprovalManager {
             expiry: expiry
         )
 
+        // Compute intent-binding hash (no expiry/maxSpendCap — just the intent fields)
+        let intentHash = computeApprovalHash(
+            chainId: chainId,
+            walletAddress: walletAddress,
+            target: target,
+            value: value,
+            calldata: calldata
+        )
+
         let approval = PendingApproval(
             code: code,
             approvalHash: approvalHash,
+            intentHash: intentHash,
             summary: summary,
             createdAt: Date(),
             expiresAt: expiry,
@@ -58,8 +69,27 @@ actor ApprovalManager {
         return (code: code, approvalHash: approvalHash)
     }
 
-    /// Verify an approval code.
-    func verify(code: String) -> ApprovalResult {
+    /// Compute the approval hash for an intent (for binding verification).
+    func computeApprovalHash(
+        chainId: UInt64,
+        walletAddress: String,
+        target: String,
+        value: UInt64,
+        calldata: Data
+    ) -> Data {
+        // Use a fixed expiry of 0 for hash comparison — the binding check
+        // only needs (chainId, wallet, target, value, calldata) to match.
+        var packed = Data()
+        packed.append(UserOpHash.padUint256(chainId))
+        packed.append(UserOpHash.padAddress(walletAddress))
+        packed.append(UserOpHash.padAddress(target))
+        packed.append(UserOpHash.padUint256(UInt64(value)))
+        packed.append(UserOpHash.keccak256(calldata))
+        return UserOpHash.keccak256(packed)
+    }
+
+    /// Verify an approval code, ensuring it was issued for the given intent hash.
+    func verify(code: String, expectedHash: Data) -> ApprovalResult {
         // Global rate limit check
         let now = Date()
         let oneMinuteAgo = now.addingTimeInterval(-60)
@@ -86,7 +116,15 @@ actor ApprovalManager {
             return .expired
         }
 
-        // Code matches — consume it (single-use)
+        // Verify the approval was issued for this specific intent
+        // Compare using only the intent-binding fields (chainId, wallet, target, value, calldata)
+        // to prevent replay of approval codes across different intents
+        if approval.intentHash != expectedHash {
+            recordGlobalFailure()
+            return .invalid("Code does not match this transaction")
+        }
+
+        // Code matches and is bound to this intent — consume it (single-use)
         pending.removeValue(forKey: code)
         return .approved(approval.approvalHash, approval.summary)
     }

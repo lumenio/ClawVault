@@ -54,7 +54,10 @@ struct SignHandler {
         }
 
         let calldata = SignatureUtils.fromHex(calldataHex) ?? Data()
-        let value = UInt64(valueStr) ?? 0
+        // Overflow detection: reject if value string exceeds UInt64 range
+        guard let value = UInt64(valueStr) else {
+            return .error(400, "Value overflows UInt64: \(valueStr)")
+        }
 
         // D14: Warn on forbidden intent fields
         let forbiddenFields = ["nonce", "signature", "paymasterAndData", "gasLimit", "maxFeePerGas"]
@@ -114,7 +117,15 @@ struct SignHandler {
         case .requireApproval(let reason):
             // D2: Check if the request includes an approval code from a previous approval
             if let approvalCode = json["approvalCode"] as? String {
-                let verifyResult = await approvalManager.verify(code: approvalCode)
+                // Compute the intent hash for the CURRENT request to bind approval to intent
+                let expectedHash = await approvalManager.computeApprovalHash(
+                    chainId: chainId,
+                    walletAddress: walletAddress,
+                    target: target,
+                    value: value,
+                    calldata: calldata
+                )
+                let verifyResult = await approvalManager.verify(code: approvalCode, expectedHash: expectedHash)
                 switch verifyResult {
                 case .approved:
                     // Approval code is valid — proceed with signing (fall through to .allow)
@@ -127,10 +138,13 @@ struct SignHandler {
                     )
                     break
                 case .invalid(let msg):
+                    await approvalManager.recordFailure(code: approvalCode)
                     return .error(403, "Invalid approval code: \(msg)")
                 case .expired:
+                    await approvalManager.recordFailure(code: approvalCode)
                     return .error(403, "Approval code expired")
                 case .revoked(let msg):
+                    await approvalManager.recordFailure(code: approvalCode)
                     return .error(403, "Approval code revoked: \(msg)")
                 case .rateLimited(let msg):
                     return .error(429, msg)

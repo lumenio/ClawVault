@@ -13,12 +13,22 @@ struct DaemonConfig: Codable {
     /// D13: Optional custom bundler URL. If set, overrides the default Pimlico public endpoint.
     var customBundlerURL: String?
 
+    // Custom limit overrides — when present, these override the profile defaults
+    var customPerTxStablecoinCap: UInt64?
+    var customDailyStablecoinCap: UInt64?
+    var customPerTxEthCap: UInt64?
+    var customDailyEthCap: UInt64?
+    var customMaxTxPerHour: Int?
+    var customMaxSlippageBps: Int?
+
     static let configDir = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent(".clawvault")
     static let configPath = configDir.appendingPathComponent("config.json")
     static let socketPath = configDir.appendingPathComponent("daemon.sock").path
 
     static let defaultEntryPoint = "0x0000000071727De22E5E9d8BAf0edAc6f37da032"
+    // Factory address — set after deployment. This is a placeholder for the deployed ClawVaultFactory.
+    static let defaultFactory = "0x0000000000000000000000000000000000000000"
 
     static func load() throws -> DaemonConfig {
         let data = try Data(contentsOf: configPath)
@@ -36,7 +46,7 @@ struct DaemonConfig: Codable {
         DaemonConfig(
             activeProfile: "balanced",
             homeChainId: 8453,
-            factoryAddress: "",
+            factoryAddress: defaultFactory,
             entryPointAddress: defaultEntryPoint,
             frozen: false
         )

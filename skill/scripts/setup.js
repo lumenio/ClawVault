@@ -1,4 +1,4 @@
-import { runSetupWizard } from '../lib/setup-wizard.js';
+import { runSetupWizard, initializeWallet, deployWallet } from '../lib/setup-wizard.js';
 
 /**
  * Run the ClawVault setup wizard and print status.
@@ -56,6 +56,32 @@ async function main() {
       console.log('Policy: configured');
     } else {
       console.log('Policy: not yet configured');
+    }
+
+    // If wallet needs deployment, offer setup + deploy flow
+    if (status.wallet && !status.wallet.deployed) {
+      const [, , , action, chainId, profile] = process.argv;
+
+      if (action === 'init' && chainId && profile) {
+        console.log(`\nInitializing wallet on chain ${chainId} with profile "${profile}"...`);
+        const initResult = await initializeWallet({
+          chainId: Number(chainId),
+          profile,
+        });
+        console.log(`Counterfactual address: ${initResult.walletAddress}`);
+        console.log(`Precompile available: ${initResult.precompileAvailable}`);
+        console.log('Send ETH to this address, then run: node scripts/setup.js deploy');
+      } else if (action === 'deploy') {
+        console.log('\nDeploying wallet on-chain...');
+        const deployResult = await deployWallet();
+        console.log(`Wallet deployed: ${deployResult.walletAddress}`);
+        console.log(`UserOp hash: ${deployResult.userOpHash}`);
+      } else {
+        console.log('\nWallet not yet deployed.');
+        console.log('To initialize: node scripts/setup.js init <chainId> <profile>');
+        console.log('  chainId: 1 (Ethereum) or 8453 (Base)');
+        console.log('  profile: "balanced" or "autonomous"');
+      }
     }
   } catch (err) {
     console.error(err.message);

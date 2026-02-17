@@ -87,20 +87,54 @@ struct PolicyHandler {
             return .error(403, "Touch ID verification failed")
         }
 
-        // 4. Apply policy changes
+        // 4. Apply policy changes — persist all supported fields
+        var updatedConfig = config
+
         if let profileName = newProfile {
             guard SecurityProfile.forName(profileName) != nil else {
                 return .error(400, "Unknown profile: \(profileName). Must be 'balanced' or 'autonomous'.")
             }
-            // Persist the new profile to config
-            var updatedConfig = config
             updatedConfig.activeProfile = profileName
-            do {
-                try updatedConfig.save()
-            } catch {
-                return .error(500, "Failed to persist config: \(error.localizedDescription)")
-            }
         }
+
+        // Apply custom limit overrides
+        if let v = json["perTxStablecoinCap"] as? UInt64 {
+            updatedConfig.customPerTxStablecoinCap = v
+        }
+        if let v = json["dailyStablecoinCap"] as? UInt64 {
+            updatedConfig.customDailyStablecoinCap = v
+        }
+        if let v = json["perTxEthCap"] as? UInt64 {
+            updatedConfig.customPerTxEthCap = v
+        }
+        if let v = json["dailyEthCap"] as? UInt64 {
+            updatedConfig.customDailyEthCap = v
+        }
+        if let v = json["maxTxPerHour"] as? Int {
+            updatedConfig.customMaxTxPerHour = v
+        }
+        if let v = json["maxSlippageBps"] as? Int {
+            updatedConfig.customMaxSlippageBps = v
+        }
+
+        // Persist to disk
+        do {
+            try updatedConfig.save()
+        } catch {
+            return .error(500, "Failed to persist config: \(error.localizedDescription)")
+        }
+
+        // Update the runtime PolicyEngine with the new profile + overrides
+        let baseProfile = SecurityProfile.forName(updatedConfig.activeProfile) ?? .balanced
+        let effectiveProfile = baseProfile.withOverrides(
+            perTxStablecoinCap: updatedConfig.customPerTxStablecoinCap,
+            dailyStablecoinCap: updatedConfig.customDailyStablecoinCap,
+            perTxEthCap: updatedConfig.customPerTxEthCap,
+            dailyEthCap: updatedConfig.customDailyEthCap,
+            maxTxPerHour: updatedConfig.customMaxTxPerHour,
+            maxSlippageBps: updatedConfig.customMaxSlippageBps
+        )
+        await policyEngine.updateProfile(effectiveProfile)
 
         await auditLogger.log(
             action: "policy_update",

@@ -20,13 +20,17 @@ enum PrecompileProbe {
                 return false
             }
 
-            // Test vector 2: invalid signature — expect 0x...00 (not revert)
+            // Test vector 2: invalid signature — expect 0x...00 or empty (not revert)
             let invalidResult = try await chainClient.ethCall(
                 to: "0x0000000000000000000000000000000000000100",
                 data: invalidSigCalldata
             )
-            // Should return 0x00...00 or empty, not revert
-            guard !invalidResult.isEmpty else { return false }
+            // Precompile returns 0 for invalid sig (not revert). Accept empty, "0x", or zero-padded result.
+            let cleanInvalid = invalidResult.hasPrefix("0x") ? String(invalidResult.dropFirst(2)) : invalidResult
+            let invalidIsZeroOrEmpty = cleanInvalid.isEmpty || cleanInvalid.allSatisfy({ $0 == "0" })
+            guard invalidResult == "0x" || invalidResult.isEmpty || invalidIsZeroOrEmpty else {
+                return false
+            }
 
             // Test vector 3: malformed input — expect empty, "0x", or all zeros (not revert)
             let malformedResult = try await chainClient.ethCall(
@@ -54,7 +58,7 @@ enum PrecompileProbe {
         + "2927b10512bae3eddcfe467828128bad2903269919f7086069c8c4df6c732838"  // r
         + "c7787964eaac00e5921fb1498a60f4606766b3d9685001558d1a974e7341513e"  // s
         + "65a2fa44daad46eab0278703edb6c4dcf5e30b8a9aec09fdc71611f6a5fa1a64"  // x
-        + "6e5c8e2e0a27b47d9b6d6e3e8e5e6b5a9c0d2f4e6a8b0c2d4f6e8a0b2c4d68"  // y (altered for test)
+        + "006e5c8e2e0a27b47d9b6d6e3e8e5e6b5a9c0d2f4e6a8b0c2d4f6e8a0b2c4d68"  // y (padded to 32 bytes)
 
     private static let invalidSigCalldata =
         "0x"
@@ -62,5 +66,5 @@ enum PrecompileProbe {
         + "0000000000000000000000000000000000000000000000000000000000000001"  // r (invalid)
         + "0000000000000000000000000000000000000000000000000000000000000001"  // s (invalid)
         + "65a2fa44daad46eab0278703edb6c4dcf5e30b8a9aec09fdc71611f6a5fa1a64"  // x
-        + "6e5c8e2e0a27b47d9b6d6e3e8e5e6b5a9c0d2f4e6a8b0c2d4f6e8a0b2c4d68"  // y
+        + "006e5c8e2e0a27b47d9b6d6e3e8e5e6b5a9c0d2f4e6a8b0c2d4f6e8a0b2c4d68"  // y (padded to 32 bytes)
 }

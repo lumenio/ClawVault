@@ -40,4 +40,25 @@ struct SecurityProfile {
         default: return nil
         }
     }
+
+    /// Create a profile with custom overrides applied on top of a base profile.
+    func withOverrides(
+        perTxStablecoinCap: UInt64? = nil,
+        dailyStablecoinCap: UInt64? = nil,
+        perTxEthCap: UInt64? = nil,
+        dailyEthCap: UInt64? = nil,
+        maxTxPerHour: Int? = nil,
+        maxSlippageBps: Int? = nil
+    ) -> SecurityProfile {
+        SecurityProfile(
+            name: self.name,
+            perTxStablecoinCap: perTxStablecoinCap ?? self.perTxStablecoinCap,
+            dailyStablecoinCap: dailyStablecoinCap ?? self.dailyStablecoinCap,
+            perTxEthCap: perTxEthCap ?? self.perTxEthCap,
+            dailyEthCap: dailyEthCap ?? self.dailyEthCap,
+            maxTxPerHour: maxTxPerHour ?? self.maxTxPerHour,
+            minCooldownSeconds: self.minCooldownSeconds,
+            maxSlippageBps: maxSlippageBps ?? self.maxSlippageBps
+        )
+    }
 }

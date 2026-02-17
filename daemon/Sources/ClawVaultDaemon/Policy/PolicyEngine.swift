@@ -3,7 +3,7 @@ import Foundation
 /// Core policy engine — default-deny, gates every signing request.
 /// This is the primary defense against prompt injection.
 actor PolicyEngine {
-    private let profile: SecurityProfile
+    private var profile: SecurityProfile
     private let protocolRegistry: ProtocolRegistry
     private let stablecoinRegistry: StablecoinRegistry
     private let spendingTracker: SpendingTracker
@@ -11,6 +11,7 @@ actor PolicyEngine {
     private let chainId: UInt64
     private var allowlistedAddresses: Set<String>
     private var frozen: Bool
+    private var walletAddress: String?
 
     enum Decision {
         case allow
@@ -25,7 +26,8 @@ actor PolicyEngine {
         allowlistedAddresses: Set<String> = [],
         frozen: Bool = false,
         chainClient: ChainClient? = nil,
-        chainId: UInt64 = 8453
+        chainId: UInt64 = 8453,
+        walletAddress: String? = nil
     ) {
         self.profile = profile
         self.protocolRegistry = protocolRegistry
@@ -35,6 +37,7 @@ actor PolicyEngine {
         self.frozen = frozen
         self.chainClient = chainClient
         self.chainId = chainId
+        self.walletAddress = walletAddress
     }
 
     /// Evaluate an intent against the policy.
@@ -95,6 +98,36 @@ actor PolicyEngine {
                 // Slippage enforcement for swap operations (§6.4)
                 let selectorHex = calldata.prefix(4).map { String(format: "%02x", $0) }.joined()
                 if selectorHex == "3593564c" { // Uniswap Universal Router execute()
+                    // Validate swap safety before slippage check
+                    if let swapParams = CalldataDecoder.extractSwapParams(calldata) {
+                        // Validate recipient is MSG_SENDER (0x0..0001) or the wallet address
+                        let recipientLower = swapParams.recipient.lowercased()
+                        let msgSender = "0x0000000000000000000000000000000000000001"
+                        let walletLower = walletAddress?.lowercased() ?? ""
+                        if recipientLower != msgSender && recipientLower != walletLower {
+                            return .requireApproval("Swap recipient is not the wallet — possible output diversion")
+                        }
+
+                        // Validate command set: only WRAP_ETH (0x0b) and V3_SWAP_EXACT_IN (0x00) allowed
+                        let allowedCommands: Set<UInt8> = [0x00, 0x0b] // V3_SWAP_EXACT_IN, WRAP_ETH
+                        let disallowedCommands = swapParams.commands.filter { !allowedCommands.contains($0) }
+                        if !disallowedCommands.isEmpty {
+                            let hexCmds = disallowedCommands.map { String(format: "0x%02x", $0) }.joined(separator: ", ")
+                            return .requireApproval("Swap contains disallowed commands [\(hexCmds)] — approval required")
+                        }
+
+                        // Validate payerIsUser consistency
+                        let hasWrapEth = swapParams.commands.contains(0x0b)
+                        if hasWrapEth && swapParams.payerIsUser {
+                            // ETH→token swap: router has WETH from WRAP_ETH, payerIsUser should be false
+                            return .requireApproval("ETH swap with payerIsUser=true — unexpected, approval required")
+                        }
+                        if !hasWrapEth && !swapParams.payerIsUser {
+                            // Token→token swap: payerIsUser should be true (wallet pays directly)
+                            return .requireApproval("Token swap with payerIsUser=false — unexpected, approval required")
+                        }
+                    }
+
                     let slippageResult = await verifySwapSlippage(calldata)
                     switch slippageResult {
                     case .cannotDecode:
@@ -128,10 +161,20 @@ actor PolicyEngine {
         }
 
         // 7. Native ETH transfer or stablecoin transfer to allowlisted address
-        let targetLower = target.lowercased()
-        let isAllowlisted = allowlistedAddresses.contains(targetLower)
+        // For ERC-20 transfers, check the decoded recipient (not target, which is the token contract)
+        let isERC20Transfer = calldata.count >= 68
+            && calldata.prefix(4).map { String(format: "%02x", $0) }.joined() == "a9059cbb"
+        let checkAddress: String
+        if isERC20Transfer {
+            // Extract recipient from calldata[16..<36] (skip 4 selector + 12 zero-padding)
+            let recipientBytes = calldata[16..<36]
+            checkAddress = ("0x" + recipientBytes.map { String(format: "%02x", $0) }.joined()).lowercased()
+        } else {
+            checkAddress = target.lowercased()
+        }
+        let isAllowlisted = allowlistedAddresses.contains(checkAddress)
 
-        if calldata.isEmpty || (calldata.count >= 4 && calldata.prefix(4).map { String(format: "%02x", $0) }.joined() == "a9059cbb") {
+        if calldata.isEmpty || isERC20Transfer {
             // Simple transfer — check spending limits
             let spendResult = await spendingTracker.check(
                 ethAmount: ethAmount,
@@ -189,6 +232,14 @@ actor PolicyEngine {
     /// Get profile info.
     var profileName: String { profile.name }
     var maxSlippageBps: Int { profile.maxSlippageBps }
+
+    /// Get the set of allowlisted addresses.
+    var currentAllowlist: Set<String> { allowlistedAddresses }
+
+    /// Update the active security profile (called by PolicyHandler after Touch ID).
+    func updateProfile(_ newProfile: SecurityProfile) {
+        self.profile = newProfile
+    }
 
     // MARK: - Slippage Verification
 

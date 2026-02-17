@@ -152,7 +152,7 @@ export async function runSetupWizard() {
  * @returns {Promise<object>} Setup result with walletAddress, precompileAvailable, etc.
  */
 export async function initializeWallet(params) {
-  const { chainId, profile, recoveryAddress } = params;
+  const { chainId, profile, recoveryAddress, factoryAddress } = params;
   if (!chainId || !profile) {
     throw new Error('chainId and profile are required');
   }
@@ -160,6 +160,9 @@ export async function initializeWallet(params) {
   const body = { chainId, profile };
   if (recoveryAddress) {
     body.recoveryAddress = recoveryAddress;
+  }
+  if (factoryAddress) {
+    body.factoryAddress = factoryAddress;
   }
 
   const response = await daemon.setup(body);

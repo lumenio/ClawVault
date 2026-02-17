@@ -1,31 +1,30 @@
 import Foundation
-import Testing
+import XCTest
 
 @testable import ClawVaultDaemon
 
-@Suite("SignatureUtils")
-struct SignatureUtilsTests {
-    @Test func hexRoundtrip() {
+final class SignatureUtilsTests: XCTestCase {
+    func testHexRoundtrip() {
         let original = Data([0xDE, 0xAD, 0xBE, 0xEF])
         let hex = SignatureUtils.toHex(original)
-        #expect(hex == "0xdeadbeef")
-        #expect(SignatureUtils.fromHex(hex) == original)
+        XCTAssertEqual(hex, "0xdeadbeef")
+        XCTAssertEqual(SignatureUtils.fromHex(hex), original)
     }
 
-    @Test func fromHexPrefix() {
+    func testFromHexPrefix() {
         let a = SignatureUtils.fromHex("0xabcd")
         let b = SignatureUtils.fromHex("abcd")
-        #expect(a == b)
-        #expect(a == Data([0xAB, 0xCD]))
+        XCTAssertEqual(a, b)
+        XCTAssertEqual(a, Data([0xAB, 0xCD]))
     }
 
-    @Test func lowSAlreadyNormalized() {
+    func testLowSAlreadyNormalized() {
         var sig = Data(count: 64)
         sig[63] = 1; sig[31] = 1
-        #expect(SignatureUtils.normalizeSignature(sig) == sig)
+        XCTAssertEqual(SignatureUtils.normalizeSignature(sig), sig)
     }
 
-    @Test func highSNormalized() {
+    func testHighSNormalized() {
         var sig = Data(count: 64)
         sig[31] = 1
         let nDiv2 = SignatureUtils.p256NDiv2
@@ -33,29 +32,29 @@ struct SignatureUtilsTests {
         sig[63] &+= 1
         let normalized = SignatureUtils.normalizeSignature(sig)
         let normalizedS = Array(normalized[32..<64])
-        #expect(SignatureUtils.compareUInt256(normalizedS, nDiv2) <= 0)
+        XCTAssertTrue(SignatureUtils.compareUInt256(normalizedS, nDiv2) <= 0)
     }
 
-    @Test func compareOrdering() {
+    func testCompareOrdering() {
         var a = [UInt8](repeating: 0, count: 32)
         var b = [UInt8](repeating: 0, count: 32)
         a[31] = 1; b[31] = 2
-        #expect(SignatureUtils.compareUInt256(a, b) < 0)
+        XCTAssertTrue(SignatureUtils.compareUInt256(a, b) < 0)
         a[31] = 2
-        #expect(SignatureUtils.compareUInt256(a, b) == 0)
+        XCTAssertEqual(SignatureUtils.compareUInt256(a, b), 0)
         a[31] = 3
-        #expect(SignatureUtils.compareUInt256(a, b) > 0)
+        XCTAssertTrue(SignatureUtils.compareUInt256(a, b) > 0)
     }
 
-    @Test func subtraction() {
+    func testSubtraction() {
         var a = [UInt8](repeating: 0, count: 32)
         var b = [UInt8](repeating: 0, count: 32)
         a[31] = 10; b[31] = 3
-        #expect(SignatureUtils.subtractUInt256(a, b)[31] == 7)
+        XCTAssertEqual(SignatureUtils.subtractUInt256(a, b)[31], 7)
     }
 
-    @Test func normalizeWrongLength() {
+    func testNormalizeWrongLength() {
         let short = Data([1, 2, 3])
-        #expect(SignatureUtils.normalizeSignature(short) == short)
+        XCTAssertEqual(SignatureUtils.normalizeSignature(short), short)
     }
 }

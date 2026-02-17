@@ -1,47 +1,48 @@
 import Foundation
-import Testing
+import XCTest
 
 @testable import ClawVaultDaemon
 
-@Suite("SpendingTracker")
-struct SpendingTrackerTests {
-    @Test func allowWithinLimits() async {
+final class SpendingTrackerTests: XCTestCase {
+    func testAllowWithinLimits() async throws {
         let tracker = SpendingTracker()
         let result = await tracker.check(ethAmount: 10_000_000_000_000_000, stablecoinAmount: 0, profile: .balanced)
-        guard case .allowed = result else { Issue.record("Expected allowed"); return }
+        guard case .allowed = result else { XCTFail("Expected allowed"); return }
     }
 
-    @Test func denyOverPerTxCap() async {
+    func testDenyOverPerTxCap() async throws {
         let tracker = SpendingTracker()
         let result = await tracker.check(ethAmount: 100_000_000_000_000_000, stablecoinAmount: 0, profile: .balanced)
-        guard case .denied(let reason) = result else { Issue.record("Expected denied"); return }
-        #expect(reason.contains("per-tx cap"))
+        guard case .denied(let reason) = result else { XCTFail("Expected denied"); return }
+        XCTAssertTrue(reason.contains("per-tx cap"))
     }
 
-    @Test func denyOverStablecoinCap() async {
+    func testDenyOverStablecoinCap() async throws {
         let tracker = SpendingTracker()
         let result = await tracker.check(ethAmount: 0, stablecoinAmount: 200_000_000, profile: .balanced)
-        guard case .denied(let reason) = result else { Issue.record("Expected denied"); return }
-        #expect(reason.contains("per-tx cap"))
+        guard case .denied(let reason) = result else { XCTFail("Expected denied"); return }
+        XCTAssertTrue(reason.contains("per-tx cap"))
     }
 
-    @Test func dailyCapAccumulation() async {
+    func testDailyCapAccumulation() async throws {
         let tracker = SpendingTracker()
-        for _ in 0..<5 {
-            let result = await tracker.check(ethAmount: 40_000_000_000_000_000, stablecoinAmount: 0, profile: .balanced)
-            if case .allowed = result {
-                await tracker.record(ethAmount: 40_000_000_000_000_000, stablecoinAmount: 0)
-            }
+        // Initialize currentDay via a check so record() accumulation isn't wiped
+        _ = await tracker.check(ethAmount: 0, stablecoinAmount: 0, profile: .balanced)
+        // Record spending directly to avoid cooldown interference
+        for _ in 0..<6 {
+            await tracker.record(ethAmount: 40_000_000_000_000_000, stablecoinAmount: 0)
         }
+        // 6 × 0.04 = 0.24 ETH recorded; daily cap is 0.25 ETH
+        // Next 0.04 would push to 0.28 > 0.25, so should be denied
         let result = await tracker.check(ethAmount: 40_000_000_000_000_000, stablecoinAmount: 0, profile: .balanced)
-        guard case .denied(let reason) = result else { Issue.record("Expected denied"); return }
-        #expect(reason.contains("Daily ETH cap"))
+        guard case .denied(let reason) = result else { XCTFail("Expected denied"); return }
+        XCTAssertTrue(reason.contains("Daily ETH cap"))
     }
 
-    @Test func remainingBudgets() async {
+    func testRemainingBudgets() async throws {
         let tracker = SpendingTracker()
         await tracker.record(ethAmount: 100_000_000_000_000_000, stablecoinAmount: 0)
         let budgets = await tracker.remainingBudgets(profile: .balanced)
-        #expect(budgets.ethRemaining == 150_000_000_000_000_000)
+        XCTAssertEqual(budgets.ethRemaining, 150_000_000_000_000_000)
     }
 }

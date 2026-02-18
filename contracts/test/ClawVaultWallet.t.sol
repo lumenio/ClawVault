@@ -671,6 +671,40 @@ contract ClawVaultWalletTest is Test {
         factory.createAccount(SIGNER_X, 0, RECOVERY_ADDR, DAILY_CAP, DAILY_STABLECOIN_CAP, stablecoins, stablecoinDecs, true, bytes32(uint256(44)));
     }
 
+    // ─── validateUserOp Frozen Check ─────────────────────────────────────
+    function test_ValidateUserOpRevertsWhenFrozen() public {
+        // Freeze the wallet
+        vm.prank(RECOVERY_ADDR);
+        wallet.freeze();
+        assertTrue(wallet.frozen());
+
+        // Build a UserOp and attempt validation — should revert WalletFrozen
+        PackedUserOperation memory userOp = _buildUserOp(
+            abi.encodeWithSelector(ClawVaultWallet.execute.selector, recipient, 0.01 ether, "")
+        );
+        userOp.signature = abi.encode(uint256(1), uint256(2));
+
+        bytes32 opHash = keccak256("test_frozen");
+        vm.prank(address(mockEntryPoint));
+        vm.expectRevert(ClawVaultWallet.WalletFrozen.selector);
+        wallet.validateUserOp(userOp, opHash, 0);
+    }
+
+    function test_ValidateUserOpSucceedsWhenNotFrozen() public {
+        // Wallet is not frozen by default
+        assertFalse(wallet.frozen());
+
+        PackedUserOperation memory userOp = _buildUserOp(
+            abi.encodeWithSelector(ClawVaultWallet.execute.selector, recipient, 0.01 ether, "")
+        );
+        userOp.signature = abi.encode(uint256(1), uint256(2));
+
+        bytes32 opHash = keccak256("test_not_frozen");
+        vm.prank(address(mockEntryPoint));
+        uint256 result = wallet.validateUserOp(userOp, opHash, 0);
+        assertEq(result, 0); // SIG_VALIDATION_SUCCESS
+    }
+
     // ─── Helpers ──────────────────────────────────────────────────────────
     function _buildUserOp(bytes memory callData) internal view returns (PackedUserOperation memory) {
         return PackedUserOperation({

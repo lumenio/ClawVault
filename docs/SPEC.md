@@ -1,6 +1,6 @@
 # ClawVault — Technical Specification
 
-**Version 0.5.0** · February 2026 · DRAFT
+**Version 0.6.0** · February 2026 · DRAFT
 
 Secure Crypto Identity & Wallet Skill for OpenClaw
 
@@ -81,13 +81,15 @@ OpenClaw Agent (LLM)
 
 ### 3.1 What Ships
 
-ClawVault is distributed as two components:
+ClawVault is distributed as three components:
 
 1. **ClawVault Skill** — a standard OpenClaw skill (`SKILL.md` + Node/shell scripts) published on ClawHub. This is what the LLM interacts with. It parses natural language into structured intents and communicates with the daemon over the Unix socket. It handles ENS resolution and ERC-8004 identity queries (read-only, no signing). The skill is installed via ClawHub like any other skill.
 
-2. **Signing Daemon** — a signed and notarized macOS binary (~1,000 lines of Swift). Distributed as a `.dmg` download, triggered automatically by the skill's setup flow. The daemon is a standalone local process — it is not a browser extension, not a CLI tool the user runs manually, and not a cloud service. It runs in the background and exposes only the Unix socket.
+2. **Companion App** (`.app` bundle) — a minimal SwiftUI menu bar application (`LSUIElement = YES`, no dock icon). Provides all user-facing UI: Touch ID prompts via `LAContext`, approval notification display, pending approvals list. Connects to the daemon via bidirectional XPC (Mach service). The companion does NOT access Secure Enclave keys — the daemon owns them exclusively. Companion quit does not affect routine `/sign` operations; the daemon runs independently.
 
-Build-from-source is available for developers but is not the default path. The Secure Enclave and Keychain require proper code-signing entitlements baked into the distributed binary.
+3. **Signing Daemon** — a signed and notarized macOS binary. Runs as a LaunchAgent with a stable Mach service name (`com.clawvault.daemon`). Registered via `~/Library/LaunchAgents/com.clawvault.daemon.plist` with `MachServices` dictionary. The daemon is the XPC Mach service; the companion connects to it. Daemon lifecycle is independent of the companion.
+
+Build-from-source is available for developers but is not the default path. The Secure Enclave and Keychain require proper code-signing entitlements baked into the distributed binary. Developers must ad-hoc sign after `swift build` — see Developer Notes appendix.
 
 ### 3.2 Installation Flow (< 5 minutes)
 
@@ -121,7 +123,7 @@ After setup, the daemon runs as a background process (launchd service on macOS).
 
 ### 3.3 User Interaction Model
 
-**There is no separate UI.** The user interacts with ClawVault entirely through the OpenClaw chat — the same interface they use for everything else. The LLM is the interface; the skill translates natural language into daemon API calls.
+**Minimal menu bar companion.** The user interacts with ClawVault primarily through the OpenClaw chat. A lightweight menu bar companion app handles the few operations requiring native macOS UI: Touch ID prompts (via `LAContext`), admin confirmation dialogs (SwiftUI sheets), and approval code display. The companion communicates with the daemon over verified XPC — the skill/LLM cannot access this channel.
 
 Example commands:
 
@@ -139,9 +141,9 @@ Example commands:
 | "Register mybot.eth" | Skill builds registration intent → daemon signs (may need approval) |
 | "Panic! Freeze everything" | Skill calls `/panic` → immediate freeze (no Touch ID) |
 
-**Approval notifications** arrive via Telegram, Signal, or macOS system notification (configurable). The user replies with the 8-digit code in the notification channel — they do not need to return to the OpenClaw chat to approve.
+**Approval notifications** arrive via the companion menu bar app (always stored in the pending approvals dropdown, regardless of macOS notification settings / Focus / DND) and optionally as macOS system notifications (best-effort). The user replies with the 8-digit code in the OpenClaw chat.
 
-**Touch ID prompts** appear as native macOS system dialogs when the daemon needs user presence for admin actions. These are triggered by the daemon, not the skill.
+**Touch ID prompts** appear as native macOS dialogs triggered by the companion app (via `LAContext.evaluatePolicy(.deviceOwnerAuthentication)`). The daemon delegates admin approval to the companion via XPC callback. If the companion is not running, admin actions fail closed (503).
 
 ### 3.4 Skill Security Invariants
 
@@ -190,12 +192,14 @@ The daemon's local security boundary is the Unix domain socket with OS-level acc
 
 The Secure Enclave signing key is created **without** a user-presence requirement — it can sign routine UserOps autonomously. This is what makes Autonomous mode possible.
 
-A separate admin key (or Keychain item) is created **with** `.userPresence` + `.privateKeyUsage` flags, requiring Touch ID or system password for each use. The daemon checks this admin key before executing any sensitive action.
+A separate admin key is created **with** `.userPresence` + `.privateKeyUsage` flags. However, the daemon does not call this key directly — it delegates admin approval to the **companion app** via XPC callback. The companion drives `LAContext.evaluatePolicy(.deviceOwnerAuthentication)` to prompt for Touch ID.
+
+**If the companion is unreachable, all admin actions fail closed (503).**
 
 **Touch ID is required for:**
 - `/policy/update` — any policy or profile change
 - `/allowlist` — adding or removing addresses or protocols
-- Unfreezing after panic
+- Unfreezing after panic (`/unfreeze`)
 - Recovery configuration changes
 
 **Touch ID is NOT required for:**
@@ -205,13 +209,13 @@ A separate admin key (or Keychain item) is created **with** `.userPresence` + `.
 
 ### 5.1.2 Trusted Local Confirmation for Admin Actions
 
-Before any Touch ID–gated action, the daemon MUST display a **trusted local confirmation dialog** (native macOS alert, not rendered by the skill or LLM) that summarizes exactly what is changing. Examples:
+Before any Touch ID–gated action, the **companion app** MUST display a **trusted local confirmation dialog** (SwiftUI sheet, not rendered by the skill or LLM) that summarizes exactly what is changing. The daemon constructs the summary from its own calldata decoder and sends it to the companion via XPC callback. Examples:
 
 - `"Raise daily stablecoin cap: 500 → 1,000 USDC. Confirm with Touch ID."`
 - `"Add address 0xABC…DEF to allowlist. Confirm with Touch ID."`
 - `"Switch profile: Balanced → Autonomous. Confirm with Touch ID."`
 
-Touch ID proves user presence but not understanding. The local summary ensures the user knows what they are approving before biometric confirmation. The skill and LLM MUST NOT be able to influence or suppress this dialog.
+Touch ID proves user presence but not understanding. The local summary ensures the user knows what they are approving before biometric confirmation. The skill and LLM MUST NOT be able to influence or suppress this dialog — they cannot access the XPC channel (code-signing validation blocks non-companion connections).
 
 ### 5.2 API Endpoints
 
@@ -224,8 +228,9 @@ All endpoints served over the Unix socket:
 | `/capabilities` | GET | Socket | Return current limits, allowlists, autopilot-eligible actions, remaining budgets, gas status |
 | `/address` | GET | Socket | Return wallet address and public key |
 | `/policy` | GET | Socket | Return current policy configuration and active profile |
-| `/policy/update` | POST | Socket + Touch ID | Modify policy (with trusted local confirmation) |
-| `/allowlist` | POST | Socket + Touch ID | Modify allowlist (with trusted local confirmation) |
+| `/policy/update` | POST | Socket + Companion approval | Modify policy (companion shows confirmation + Touch ID) |
+| `/allowlist` | POST | Socket + Companion approval | Modify allowlist (companion shows confirmation + Touch ID) |
+| `/unfreeze` | POST | Socket + Companion approval | Unfreeze locally after on-chain unfreeze confirmed |
 | `/panic` | POST | Socket only | Emergency freeze (no Touch ID — speed over ceremony) |
 | `/health` | GET | None | Daemon status (read-only, no secrets) |
 | `/audit-log` | GET | Socket | Recent decisions + tx hashes (redacted) |
@@ -393,12 +398,17 @@ Implementers MUST NOT use the reduced ApprovalHash for the Secure Enclave signat
 When a transaction exceeds policy or involves unknown calldata, the daemon MUST initiate a code-based approval flow.
 
 1. Daemon detects policy exception.
-2. Daemon generates a single-use **8-digit** code and computes the ApprovalHash.
-3. Daemon sends notification (Telegram/Signal/system alert) with: human-readable action summary (from `/decode`), chain, recipient, asset, amount, ApprovalHash prefix, code, and expiry.
-4. User replies with the code.
-5. Daemon verifies: code matches, ApprovalHash matches, not expired, not previously used.
-6. Daemon constructs the full UserOperation, signs the `userOpHash` via Secure Enclave, and submits.
-7. If no valid approval within timeout (default 3 minutes), the transaction is rejected.
+2. **Fail closed:** If the companion app is not connected, the daemon MUST NOT create the pending approval. Return 503 ("Companion app required for approvals — please start ClawVault.app").
+3. Daemon generates a single-use **8-digit** code and computes the ApprovalHash.
+4. Daemon calls `companion.postApprovalNotification()` via XPC. The companion stores the approval in its menu bar pending list (always visible regardless of macOS notification settings / Focus / DND) and attempts a macOS system notification (best-effort). Returns `true` if stored, regardless of notification delivery.
+5. User sees the code in the companion's menu bar dropdown and/or macOS notification. User replies with the code in the OpenClaw chat.
+6. Daemon verifies: code matches, ApprovalHash matches, not expired, not previously used.
+7. Daemon constructs the full UserOperation, signs the `userOpHash` via Secure Enclave, and submits.
+8. If no valid approval within timeout (default 3 minutes), the transaction is rejected.
+
+**Companion restart:** Pending approvals are stored in the daemon. When the companion reconnects, it calls `daemon.listPendingApprovals()` to repopulate its display. Codes are never lost due to companion restart.
+
+**Approval code isolation:** Codes MUST NEVER be exposed via the Unix socket API where the skill/LLM can read them. They are shared with the companion only over verified XPC (code-signing check).
 
 ### 7.4 Approval Code Security
 
@@ -746,3 +756,101 @@ Full address list maintained as a data file in the daemon repository.
 | ERC-4337 EntryPoint | eth-infinitism | GPL-3.0 | Production (v0.7) |
 | ERC-8004 Registry | Ethereum | CC0 | Live on mainnet |
 | Pimlico Bundler | pimlico.io | N/A (public API) | Production |
+
+---
+
+## Appendix F: XPC Security
+
+### Bidirectional XPC Architecture
+
+The daemon registers as a Mach service via `NSXPCListener(machServiceName: "com.clawvault.daemon")`. The companion connects using `NSXPCConnection(machServiceName: "com.clawvault.daemon")`.
+
+**Two protocols:**
+- `DaemonXPCProtocol` (companion → daemon): `listPendingApprovals()`, `ping()`
+- `CompanionCallbackProtocol` (daemon → companion): `requestAdminApproval()`, `postApprovalNotification()`
+
+The companion sets its `exportedInterface` to `CompanionCallbackProtocol` and its `exportedObject` to itself. The daemon stores a reference to the companion's callback proxy for daemon-initiated calls.
+
+### Connection Validation
+
+In `shouldAcceptNewConnection`, the daemon MUST verify the connecting process is the real companion app:
+
+- **Release builds:** Extract audit token, verify `bundleIdentifier == "com.clawvault.companion"` AND `teamIdentifier == <Developer ID team>` via `SecCodeCheckValidity`. Reject all others.
+- **Debug builds (`#if DEBUG`):** Accept ad-hoc signed binaries only if `~/.clawvault/dev-mode` flag file exists. The `#if DEBUG` guard is compile-time so this relaxation cannot ship in release.
+
+This prevents the untrusted skill/LLM (which runs as the same OS user) from connecting to the daemon XPC, reading approval codes, or spoofing callbacks.
+
+### LaunchAgent Requirement
+
+The daemon plist at `~/Library/LaunchAgents/com.clawvault.daemon.plist` MUST contain:
+```xml
+<key>MachServices</key>
+<dict>
+    <key>com.clawvault.daemon</key>
+    <true/>
+</dict>
+```
+Without this, XPC Mach service discovery will not work.
+
+---
+
+## Appendix G: Config Integrity
+
+### SE-Signed Configuration
+
+The daemon config at `~/.clawvault/config.json` is signed with the Secure Enclave signing key. The SE private key is non-extractable, so the untrusted skill cannot forge signatures.
+
+- **Save:** Serialize config JSON → sign raw bytes with SE signing key → write `config.json` + `config.sig` (raw P-256 signature)
+- **Load:** Read raw bytes of `config.json` from disk + read `config.sig` → verify signature against SE public key over the exact raw bytes (never re-serialize before verifying). If mismatch → return `nil`
+- **Tampered config → safe mode:** If verification fails on startup, the daemon enters safe mode: `frozen = true`, default-deny everything. Companion admin approval required to reset.
+- **First-run migration:** If `config.json` exists but `config.sig` does not (legacy config), the daemon signs the existing config without entering safe mode.
+
+This prevents silent edits to any security-relevant setting (profile, caps, allowlist, frozen state).
+
+---
+
+## Appendix H: Freeze Sync
+
+### On-Chain Freeze Synchronization
+
+The daemon polls the on-chain `frozen()` state (selector `0x054f7d9c`) to detect external freeze events.
+
+- **Startup sync:** Before accepting any connections, the daemon calls `syncOnce()` to check on-chain state.
+- **Periodic sync:** Every 60 seconds, the daemon re-checks.
+- **One-way only:** If on-chain frozen AND local not frozen → force local `policyEngine.freeze()` + persist to config (with new signature). **Never auto-unfreezes** — clearing local freeze requires explicit `/unfreeze` with companion approval.
+- **Network errors → fail safe:** Don't change state, log warning.
+
+### Unfreeze Semantics
+
+The `/unfreeze` endpoint clears local freeze state only, after verifying on-chain `frozen() == false`. On-chain unfreeze is performed externally by the recovery address (EOA) calling `requestUnfreeze()` + `finalizeUnfreeze()`. This is consistent with `validateUserOp` rejecting all UserOps while frozen.
+
+---
+
+## Appendix I: Developer Notes
+
+### Code-Signing After Build
+
+Every `swift build` strips the code signature. To access the Secure Enclave during development:
+
+```bash
+cd daemon && swift build && ../scripts/codesign-dev.sh
+```
+
+This ad-hoc signs the binary with the required `keychain-access-groups` entitlement.
+
+### Dev-Mode Flag
+
+To enable relaxed XPC validation in debug builds (accept ad-hoc connections without team ID verification):
+
+```bash
+touch ~/.clawvault/dev-mode
+```
+
+This flag is checked only in `#if DEBUG` builds. Without it, even debug builds reject non-companion XPC connections.
+
+### LaunchAgent Installation
+
+```bash
+cp daemon/com.clawvault.daemon.plist ~/Library/LaunchAgents/
+launchctl load ~/Library/LaunchAgents/com.clawvault.daemon.plist
+```

@@ -148,6 +148,20 @@ actor ApprovalManager {
         return pending.count
     }
 
+    /// List all pending approvals as XPC-transportable info objects.
+    /// Used exclusively by the XPC listener (for companion UI), never by the Unix socket API.
+    func listPending() -> [PendingApprovalInfo] {
+        purgeExpired()
+        return pending.values.map { approval in
+            PendingApprovalInfo(
+                code: approval.code,
+                summary: approval.summary,
+                hashPrefix: String(SignatureUtils.toHex(approval.approvalHash).prefix(18)),
+                expiresAt: approval.expiresAt
+            )
+        }
+    }
+
     // MARK: - Private
 
     private func generateCode() -> String {

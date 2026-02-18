@@ -1,14 +1,14 @@
 import Foundation
 
-#if canImport(AppKit)
-    import AppKit
-#endif
-
 /// POST /unfreeze — Unfreeze the wallet locally after on-chain unfreeze is confirmed.
-/// Requires: config.frozen == true, on-chain wallet.frozen() == false, macOS dialog, Touch ID.
+/// Requires: config.frozen == true, on-chain wallet.frozen() == false, companion approval + Touch ID.
+///
+/// The /unfreeze endpoint clears local freeze state only, after verifying on-chain frozen() == false.
+/// On-chain unfreeze is performed externally by the recovery address (EOA) calling
+/// requestUnfreeze() + finalizeUnfreeze() via a normal transaction — NOT via a UserOp from the daemon.
 struct UnfreezeHandler {
     let services: ServiceContainer
-    let seManager: SecureEnclaveManager
+    let companionProxy: CompanionProxy
     let auditLogger: AuditLogger
     let configStore: ConfigStore
 
@@ -47,42 +47,29 @@ struct UnfreezeHandler {
             ])
         }
 
-        // 3. Show native macOS confirmation dialog
-        #if canImport(AppKit)
-            let confirmed = await MainActor.run { () -> Bool in
-                let alert = NSAlert()
-                alert.messageText = "ClawVault Unfreeze"
-                alert.informativeText = "The wallet has been unfrozen on-chain. Confirm to unfreeze the daemon locally and resume signing."
-                alert.alertStyle = .warning
-                alert.addButton(withTitle: "Unfreeze")
-                alert.addButton(withTitle: "Cancel")
-                return alert.runModal() == .alertFirstButtonReturn
-            }
-
-            if !confirmed {
+        // 3. Request admin approval via companion (Touch ID + confirmation dialog)
+        do {
+            let approved = try await companionProxy.requestAdminApproval(
+                summary: "The wallet has been unfrozen on-chain. Confirm to unfreeze the daemon locally and resume signing."
+            )
+            if !approved {
                 await auditLogger.log(
                     action: "unfreeze",
                     decision: "denied",
-                    reason: "User denied confirmation dialog"
+                    reason: "User denied via companion app"
                 )
                 return .error(403, "Unfreeze denied by user")
             }
-        #endif
-
-        // 4. Require Touch ID via adminSign()
-        let challengeData = "unfreeze:\(Date().timeIntervalSince1970)".data(using: .utf8) ?? Data()
-        do {
-            _ = try await seManager.adminSign(challengeData)
         } catch {
             await auditLogger.log(
                 action: "unfreeze",
                 decision: "denied",
-                reason: "Touch ID verification failed: \(error.localizedDescription)"
+                reason: "Companion unreachable: \(error.localizedDescription)"
             )
-            return .error(403, "Touch ID verification failed")
+            return .error(503, error.localizedDescription)
         }
 
-        // 5. Unfreeze locally
+        // 4. Unfreeze locally
         await services.policyEngine.unfreeze()
         do {
             try configStore.update { $0.frozen = false }

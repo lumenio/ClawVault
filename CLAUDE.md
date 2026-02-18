@@ -6,7 +6,8 @@ See docs/SPEC.md for the full technical specification (read it when you need arc
 
 ## Tech Stack
 
-- **Daemon:** Swift, macOS only. CryptoKit (Secure Enclave P-256), Foundation (Unix socket server). Runs as launchd background service.
+- **Daemon:** Swift, macOS only. CryptoKit (Secure Enclave P-256), Foundation (Unix socket server). Runs as LaunchAgent with Mach service for XPC.
+- **Companion:** SwiftUI menu bar app (`LSUIElement`). LAContext (Touch ID) + UNUserNotificationCenter. Connects to daemon via bidirectional XPC.
 - **Skill:** Node.js scripts + `SKILL.md`. Standard OpenClaw skill structure. Communicates with daemon over Unix socket.
 - **Contracts:** Solidity 0.8.x. Coinbase Smart Wallet fork + policy module. Foundry for build/test. Targets ERC-4337 v0.7 EntryPoint.
 - **Chains:** Ethereum L1 (chainId 1) and Base (chainId 8453) only.
@@ -15,12 +16,15 @@ See docs/SPEC.md for the full technical specification (read it when you need arc
 ## Project Structure
 
 ```
-daemon/           Swift signing daemon (macOS)
+daemon/           Swift signing daemon (macOS LaunchAgent + Mach service)
+companion/        SwiftUI menu bar app (Touch ID, notifications, approvals)
+shared/           Shared XPC protocols (symlinked into both targets)
 skill/            OpenClaw skill (SKILL.md + Node scripts)
 contracts/        Solidity smart wallet + policy + recovery
   src/
   test/
   script/
+scripts/          Dev tooling (codesign-dev.sh)
 docs/             Architecture docs
   SPEC.md         Full technical specification
 ```
@@ -32,23 +36,28 @@ docs/             Architecture docs
 - `cd contracts && forge test -vvv --match-test <name>` — verbose single test
 - `cd daemon && swift build` — build daemon
 - `cd daemon && swift test` — run daemon unit tests
+- `cd daemon && swift build && ../scripts/codesign-dev.sh` — build + ad-hoc sign for SE access
+- `cd companion && swift build` — build companion app
 
 ## Critical Invariants — NEVER violate these
 
 1. **Skill is untrusted.** The skill MUST only emit `{target, calldata, value}`. It MUST NOT set nonce, gas, chainId, fees, or signatures. The daemon owns UserOp construction exclusively.
 2. **Default-deny policy.** Unknown calldata → require human approval. Policy is an allowlist, not a blocklist. When in doubt, require approval.
 3. **No paymasters.** `paymasterAndData` is always empty. User pays gas. Daemon must preflight every tx (check ETH balance ≥ estimated cost + buffer) and refuse if insufficient.
-4. **Two Secure Enclave keys.** Signing key: no `.userPresence` (signs silently for routine ops). Admin key: `.userPresence` required (Touch ID for policy changes). Never mix these up.
+4. **Two Secure Enclave keys.** Signing key: no `.userPresence` (signs silently for routine ops). Admin key: `.userPresence` required. Touch ID prompted by companion app (LAContext), never by daemon. If companion unreachable, admin actions fail closed (503).
 5. **On-chain wallet verifies standard `userOpHash` only.** Never the reduced ApprovalHash. See SPEC.md §7.1.
 6. **Blocked selectors.** `approve`, `increaseAllowance`, `decreaseAllowance`, `setApprovalForAll`, `permit` (EIP-2612 + DAI), Permit2 — all MUST require explicit user approval regardless of context.
 7. **Low-S normalization.** Every P-256 signature must be normalized: if `s > n/2`, replace with `n - s`. Contracts may reject high-S.
 8. **Panic asymmetry.** `freeze()` is instant, no Touch ID. Unfreeze requires Touch ID + 10min delay. Key rotation auto-freezes + 48h delay.
+9. **Freeze integrity.** On-chain `frozen` forces local `frozen` (one-way, 60s sync + startup check before serving). Never auto-unfreeze.
+10. **Approval code isolation.** Codes never exposed via Unix socket API. Shared with companion only over verified XPC (code-signing check).
+11. **Config integrity.** Config signed with SE key. Tampered/malformed config → safe mode (frozen).
 
 ## Daemon Socket Protocol
 
 - Socket: `~/.clawvault/daemon.sock` (0600, directory 0700)
 - Auth: peer UID check only (same OS user). No HMAC, no shared secrets.
-- Admin actions (`/policy/update`, `/allowlist`): daemon shows native macOS confirmation dialog summarizing the change, THEN requires Touch ID. The skill/LLM cannot influence this dialog.
+- Admin actions (`/policy/update`, `/allowlist`, `/unfreeze`): daemon sends XPC callback to companion → companion shows SwiftUI sheet + Touch ID → result returned. Companion not connected → 503.
 
 ## Daemon API Quick Reference
 
@@ -57,14 +66,16 @@ docs/             Architecture docs
 | `/sign` | POST | Socket | Policy-checked, gas-preflighted |
 | `/decode` | POST | Socket | Human-readable intent summary, no signing |
 | `/capabilities` | GET | Socket | Limits, budgets, gas status (`"ok"/"low"`) |
-| `/policy/update` | POST | Socket+TouchID | Shows local confirmation first |
-| `/allowlist` | POST | Socket+TouchID | Shows local confirmation first |
+| `/policy/update` | POST | Socket + Companion approval | Companion shows confirmation + Touch ID |
+| `/allowlist` | POST | Socket + Companion approval | Companion shows confirmation + Touch ID |
+| `/unfreeze` | POST | Socket + Companion approval | Verifies on-chain unfrozen first |
 | `/panic` | POST | Socket | Instant freeze, no Touch ID |
 | `/health` | GET | None | Status check |
 
 ## Contract Architecture
 
 - Fork of Coinbase Smart Wallet. P-256 sig verification in `validateUserOp`.
+- `validateUserOp` checks `frozen` first — rejects all UserOps when frozen (prevents wasted gas).
 - Use precompile at `0x100` when available (EIP-7951 L1, RIP-7212 Base), fallback to Daimo `p256-verifier`.
 - On-chain daily spending cap tracks both native ETH and known stablecoins.
 - Recovery: single `recoveryAddress` with `freeze()` (instant) + `initiateKeyRotation()` (48h timelock, auto-freezes).
@@ -90,3 +101,8 @@ Two built-in profiles configured at setup. Limits are identical across chains.
 - ERC-8004 identity registers on the home chain (not forced to L1). Wallet must exist on that chain for ERC-1271 verification.
 - Signature format is raw `r||s` (64 bytes). No DER encoding.
 - Bundler reimburses itself from wallet balance atomically. If wallet has insufficient ETH, the UserOp will revert on-chain and the user still loses gas. That's why preflight is critical.
+- **Codesign after build:** Every `swift build` strips signature. Run `scripts/codesign-dev.sh` after building for SE access.
+- **Companion required for admin/approval:** `/policy/update`, `/allowlist`, `/unfreeze` need companion running. `/sign` requiring approval also needs companion. Routine `/sign` within policy works without companion.
+- **On-chain freeze sync is one-way:** On-chain freeze forces local freeze. Local unfreeze requires explicit `/unfreeze` after on-chain unfreeze.
+- **Config edits trigger safe mode:** Manual edits to `~/.clawvault/config.json` invalidate the SE signature → daemon starts frozen.
+- **LaunchAgent plist required for XPC:** `com.clawvault.daemon.plist` must be in `~/Library/LaunchAgents/` with `MachServices` dictionary for XPC to work.

@@ -1,0 +1,10 @@
+{
+  "name": "clawvault-e2e",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "description": "End-to-end tests for ClawVault (Skill → Daemon → Bundler → Chain)",
+  "scripts": {
+    "test": "node --test tests/"
+  }
+}

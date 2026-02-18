@@ -102,7 +102,7 @@ struct ClawVaultDaemon {
             return
         }
 
-        let chainClient = ChainClient(rpcURL: chainConfig.rpcURL)
+        let chainClient = ChainClient(rpcURL: config.customRpcURL ?? chainConfig.rpcURL)
         let bundlerURL = config.customBundlerURL ?? chainConfig.bundlerURL
         let bundlerClient = BundlerClient(bundlerURL: bundlerURL)
 

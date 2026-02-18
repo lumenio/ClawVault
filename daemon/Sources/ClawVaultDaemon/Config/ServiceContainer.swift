@@ -72,7 +72,7 @@ final class ServiceContainer: @unchecked Sendable {
 
         guard let chainConfig = ChainConfig.forChain(config.homeChainId) else { return }
 
-        let newChainClient = ChainClient(rpcURL: chainConfig.rpcURL)
+        let newChainClient = ChainClient(rpcURL: config.customRpcURL ?? chainConfig.rpcURL)
         let bundlerURL = config.customBundlerURL ?? chainConfig.bundlerURL
         let newBundlerClient = BundlerClient(bundlerURL: bundlerURL)
 

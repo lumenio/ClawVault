@@ -13,6 +13,8 @@ struct DaemonConfig: Codable {
     var frozen: Bool
     /// D13: Optional custom bundler URL. If set, overrides the default Pimlico public endpoint.
     var customBundlerURL: String?
+    /// Optional custom RPC URL. If set, overrides the chain's default RPC endpoint.
+    var customRpcURL: String?
 
     // Custom limit overrides — when present, these override the profile defaults
     var customPerTxStablecoinCap: UInt64?
@@ -23,8 +25,13 @@ struct DaemonConfig: Codable {
     var customMaxSlippageBps: Int?
     var allowlistedAddresses: [String]?
 
-    static let configDir = FileManager.default.homeDirectoryForCurrentUser
-        .appendingPathComponent(".clawvault")
+    static let configDir: URL = {
+        if let override = ProcessInfo.processInfo.environment["CLAWVAULT_CONFIG_DIR"] {
+            return URL(fileURLWithPath: override)
+        }
+        return FileManager.default.homeDirectoryForCurrentUser
+            .appendingPathComponent(".clawvault")
+    }()
     static let configPath = configDir.appendingPathComponent("config.json")
     static let configSigPath = configDir.appendingPathComponent("config.sig")
     static let socketPath = configDir.appendingPathComponent("daemon.sock").path

@@ -1,0 +1,1 @@
+/Users/slava/projects/ClawVault/shared/XPCProtocols.swift

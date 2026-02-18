@@ -1,13 +1,9 @@
 import Foundation
 
-#if canImport(AppKit)
-    import AppKit
-#endif
-
-/// POST /allowlist — Modify allowlist (requires Touch ID).
+/// POST /allowlist — Modify allowlist (requires companion approval + Touch ID).
 struct AllowlistHandler {
     let services: ServiceContainer
-    let seManager: SecureEnclaveManager
+    let companionProxy: CompanionProxy
     let auditLogger: AuditLogger
     let configStore: ConfigStore
 
@@ -30,51 +26,36 @@ struct AllowlistHandler {
             ? "Add \(address) to allowlist"
             : "Remove \(address) from allowlist"
 
-        // 2. Show native macOS confirmation dialog
-        #if canImport(AppKit)
-            let confirmed = await MainActor.run { () -> Bool in
-                let alert = NSAlert()
-                alert.messageText = "ClawVault Allowlist Update"
-                alert.informativeText = changeSummary
-                alert.alertStyle = .warning
-                alert.addButton(withTitle: "Approve")
-                alert.addButton(withTitle: "Deny")
-                return alert.runModal() == .alertFirstButtonReturn
-            }
-
-            if !confirmed {
+        // 2. Request admin approval via companion (Touch ID + confirmation dialog)
+        do {
+            let approved = try await companionProxy.requestAdminApproval(summary: changeSummary)
+            if !approved {
                 await auditLogger.log(
                     action: "allowlist_update",
                     target: address,
                     decision: "denied",
-                    reason: "User denied confirmation dialog"
+                    reason: "User denied via companion app"
                 )
                 return .error(403, "Allowlist update denied by user")
             }
-        #endif
-
-        // 3. Require Touch ID via adminSign()
-        let challengeData = (changeSummary + ":\(Date().timeIntervalSince1970)").data(using: .utf8) ?? Data()
-        do {
-            _ = try await seManager.adminSign(challengeData)
         } catch {
             await auditLogger.log(
                 action: "allowlist_update",
                 target: address,
                 decision: "denied",
-                reason: "Touch ID verification failed: \(error.localizedDescription)"
+                reason: "Companion unreachable: \(error.localizedDescription)"
             )
-            return .error(403, "Touch ID verification failed")
+            return .error(503, error.localizedDescription)
         }
 
-        // 4. Apply changes to policy engine
+        // 3. Apply changes to policy engine
         if action == "add" {
             await services.policyEngine.addToAllowlist(address)
         } else {
             await services.policyEngine.removeFromAllowlist(address)
         }
 
-        // 5. Persist allowlist to config
+        // 4. Persist allowlist to config
         let currentAllowlist = await services.policyEngine.currentAllowlist
         do {
             try configStore.update { cfg in

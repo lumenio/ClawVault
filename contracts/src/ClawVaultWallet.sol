@@ -144,6 +144,10 @@ contract ClawVaultWallet is IAccount {
         bytes32 userOpHash,
         uint256 missingAccountFunds
     ) external onlyEntryPoint returns (uint256 validationData) {
+        // Frozen check first — reject all UserOps when frozen.
+        // Makes bundler simulation fail early, preventing wasted gas.
+        if (frozen) revert WalletFrozen();
+
         // §6.5: paymasterAndData MUST be empty — no paymasters allowed
         if (userOp.paymasterAndData.length > 0) revert NoPaymastersAllowed();
 

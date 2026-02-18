@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 
 /// ClawVault Signing Daemon
@@ -7,31 +8,24 @@ import Foundation
 @main
 struct ClawVaultDaemon {
     static func main() async {
-        print("[ClawVault] Starting daemon v0.1.0")
+        print("[ClawVault] Starting daemon v0.2.0")
 
-        // Load or create config
-        let configStore: ConfigStore
+        // Ensure config directory exists
+        let fm = FileManager.default
         do {
-            // Ensure config directory exists
-            let fm = FileManager.default
             if !fm.fileExists(atPath: DaemonConfig.configDir.path) {
                 try fm.createDirectory(at: DaemonConfig.configDir, withIntermediateDirectories: true)
                 try fm.setAttributes(
                     [.posixPermissions: 0o700], ofItemAtPath: DaemonConfig.configDir.path)
             }
-
-            let config = (try? DaemonConfig.load()) ?? DaemonConfig.defaultConfig()
-            try config.save()
-            configStore = ConfigStore(config)
         } catch {
-            print("[ClawVault] ERROR: Failed to initialize config: \(error)")
+            print("[ClawVault] ERROR: Failed to create config directory: \(error)")
             return
         }
 
-        // Read initial config snapshot for startup
-        var config = configStore.read()
-
-        // Initialize Secure Enclave
+        // ──────────────────────────────────────────────────────────────────────
+        // 1. Initialize Secure Enclave (must happen before config verification)
+        // ──────────────────────────────────────────────────────────────────────
         let seManager = SecureEnclaveManager()
         do {
             try await seManager.initialize()
@@ -44,14 +38,71 @@ struct ClawVaultDaemon {
             print("[ClawVault] Running in degraded mode (no signing capability)")
         }
 
-        // Initialize chain and bundler clients
+        // ──────────────────────────────────────────────────────────────────────
+        // 2. Load + verify config integrity (SE must be initialized first)
+        // ──────────────────────────────────────────────────────────────────────
+        let configStore: ConfigStore
+        var safeMode = false
+        do {
+            let signingKey = try await seManager.signingKeyForConfig()
+            let publicKey = signingKey.publicKey
+
+            if let verified = DaemonConfig.loadVerified(publicKey: publicKey) {
+                // Config signature valid
+                configStore = ConfigStore(verified)
+                configStore.setSigner(signingKey)
+                print("[ClawVault] Config integrity verified")
+            } else if fm.fileExists(atPath: DaemonConfig.configPath.path) {
+                // Config exists but verification failed — check if it's a first-time migration
+                // (no .sig file yet = legacy config, not tampered)
+                if !fm.fileExists(atPath: DaemonConfig.configSigPath.path) {
+                    // Legacy config without signature — migrate by signing it
+                    let config = (try? DaemonConfig.load()) ?? DaemonConfig.defaultConfig()
+                    try config.save(signer: signingKey)
+                    configStore = ConfigStore(config)
+                    configStore.setSigner(signingKey)
+                    print("[ClawVault] Migrated legacy config — now signed")
+                } else {
+                    // Signature file exists but verification failed → tampered
+                    print("[ClawVault] WARNING: Config integrity check failed — starting in safe mode")
+                    safeMode = true
+                    var safeModeConfig = DaemonConfig.defaultConfig()
+                    safeModeConfig.frozen = true
+                    try safeModeConfig.save(signer: signingKey)
+                    configStore = ConfigStore(safeModeConfig)
+                    configStore.setSigner(signingKey)
+                }
+            } else {
+                // First run — create default config and sign it
+                let config = DaemonConfig.defaultConfig()
+                try config.save(signer: signingKey)
+                configStore = ConfigStore(config)
+                configStore.setSigner(signingKey)
+                print("[ClawVault] Created default config (first run)")
+            }
+        } catch {
+            print("[ClawVault] ERROR: Failed to initialize config: \(error)")
+            // Fallback: load or create without signing
+            let config = (try? DaemonConfig.load()) ?? DaemonConfig.defaultConfig()
+            try? config.save()
+            configStore = ConfigStore(config)
+        }
+
+        if safeMode {
+            print("[ClawVault] SAFE MODE: frozen=true, default-deny. Companion admin approval required to reset.")
+        }
+
+        // ──────────────────────────────────────────────────────────────────────
+        // 3. Initialize chain clients, policy engine, services
+        // ──────────────────────────────────────────────────────────────────────
+        var config = configStore.read()
+
         guard let chainConfig = ChainConfig.forChain(config.homeChainId) else {
             print("[ClawVault] ERROR: Unknown chain ID \(config.homeChainId)")
             return
         }
 
         let chainClient = ChainClient(rpcURL: chainConfig.rpcURL)
-        // D13: Use custom bundler URL if configured, otherwise use default Pimlico endpoint
         let bundlerURL = config.customBundlerURL ?? chainConfig.bundlerURL
         let bundlerClient = BundlerClient(bundlerURL: bundlerURL)
 
@@ -87,7 +138,6 @@ struct ClawVaultDaemon {
             walletAddress: config.walletAddress
         )
 
-        // Initialize other components
         let userOpBuilder = UserOpBuilder(
             chainClient: chainClient,
             bundlerClient: bundlerClient,
@@ -97,7 +147,6 @@ struct ClawVaultDaemon {
         let approvalManager = ApprovalManager()
         let auditLogger = AuditLogger()
 
-        // ServiceContainer: wraps all chain-dependent services so /setup can reconfigure them
         let services = ServiceContainer(
             chainClient: chainClient,
             bundlerClient: bundlerClient,
@@ -107,7 +156,26 @@ struct ClawVaultDaemon {
             stablecoinRegistry: stablecoinRegistry
         )
 
-        // Set up router
+        // ──────────────────────────────────────────────────────────────────────
+        // 4. Run initial freeze sync BEFORE accepting connections
+        // ──────────────────────────────────────────────────────────────────────
+        let freezeSyncService = FreezeSyncService(
+            services: services,
+            configStore: configStore,
+            auditLogger: auditLogger
+        )
+        await freezeSyncService.syncOnce()
+
+        // ──────────────────────────────────────────────────────────────────────
+        // 5. Create XPC service + CompanionProxy, start XPC listener
+        // ──────────────────────────────────────────────────────────────────────
+        let xpcService = DaemonXPCService(approvalManager: approvalManager)
+        let companionProxy = xpcService.companionProxy
+        xpcService.start()
+
+        // ──────────────────────────────────────────────────────────────────────
+        // 6. Set up router — pass companionProxy to handlers that need it
+        // ──────────────────────────────────────────────────────────────────────
         let router = RequestRouter()
 
         // Health — no auth
@@ -139,23 +207,24 @@ struct ClawVaultDaemon {
             await decodeHandler.handle(request: req)
         }
 
-        // Sign
+        // Sign — uses companionProxy for approval notifications
         let signHandler = SignHandler(
             services: services,
             seManager: seManager,
             approvalManager: approvalManager,
             auditLogger: auditLogger,
-            configStore: configStore
+            configStore: configStore,
+            companionProxy: companionProxy
         )
         router.register("POST", "/sign") { req in
             await signHandler.handle(request: req)
         }
 
-        // Policy
+        // Policy — uses companionProxy instead of seManager for admin approval
         let policyHandler = PolicyHandler(
             configStore: configStore,
             services: services,
-            seManager: seManager,
+            companionProxy: companionProxy,
             auditLogger: auditLogger
         )
         router.register("GET", "/policy") { req in
@@ -179,10 +248,10 @@ struct ClawVaultDaemon {
             await setupHandler.handleDeploy(request: req)
         }
 
-        // Allowlist
+        // Allowlist — uses companionProxy instead of seManager for admin approval
         let allowlistHandler = AllowlistHandler(
             services: services,
-            seManager: seManager,
+            companionProxy: companionProxy,
             auditLogger: auditLogger,
             configStore: configStore
         )
@@ -201,10 +270,10 @@ struct ClawVaultDaemon {
             await panicHandler.handle(request: req)
         }
 
-        // Unfreeze
+        // Unfreeze — uses companionProxy instead of seManager for admin approval
         let unfreezeHandler = UnfreezeHandler(
             services: services,
-            seManager: seManager,
+            companionProxy: companionProxy,
             auditLogger: auditLogger,
             configStore: configStore
         )
@@ -218,7 +287,9 @@ struct ClawVaultDaemon {
             await auditLogHandler.handle(request: req)
         }
 
-        // Start socket server
+        // ──────────────────────────────────────────────────────────────────────
+        // 7. Start socket server + accept loop
+        // ──────────────────────────────────────────────────────────────────────
         let server = SocketServer(socketPath: DaemonConfig.socketPath, router: router)
         do {
             try await server.start()
@@ -227,8 +298,12 @@ struct ClawVaultDaemon {
                 "[ClawVault] Profile: \(config.activeProfile), Chain: \(config.homeChainId)"
             )
 
-            // Request notification permission
-            await NotificationSender.requestPermission()
+            // ──────────────────────────────────────────────────────────────────
+            // 8. Start periodic freeze sync (detached task, every 60s)
+            // ──────────────────────────────────────────────────────────────────
+            Task.detached {
+                await freezeSyncService.startPeriodicSync()
+            }
 
             // Accept connections forever
             await server.acceptLoop()

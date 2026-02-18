@@ -30,6 +30,7 @@ struct SignHandler {
     let approvalManager: ApprovalManager
     let auditLogger: AuditLogger
     let configStore: ConfigStore
+    let companionProxy: CompanionProxy
 
     /// D12: Rate limiter — 30 requests per minute
     private static let rateLimiter = SignRateLimiter()
@@ -149,6 +150,11 @@ struct SignHandler {
                     return .error(429, msg)
                 }
             } else {
+                // Fail closed: if companion is not connected, do NOT create the pending approval
+                guard await companionProxy.isConnected else {
+                    return .error(503, "Companion app required for approvals — please start ClawVault.app")
+                }
+
                 // No approval code — create a new approval request
                 let decoded = CalldataDecoder.decode(
                     calldata: calldata,
@@ -168,14 +174,28 @@ struct SignHandler {
                     summary: decoded.summary
                 )
 
-                let hashPrefix = SignatureUtils.toHex(approvalHash).prefix(18)
+                let hashPrefix = String(SignatureUtils.toHex(approvalHash).prefix(18))
 
-                // Send notification
-                await NotificationSender.sendApprovalNotification(
-                    code: code,
-                    summary: decoded.summary,
-                    approvalHashPrefix: String(hashPrefix)
-                )
+                // Post notification via companion XPC
+                do {
+                    _ = try await companionProxy.postApprovalNotification(
+                        code: code,
+                        summary: decoded.summary,
+                        hashPrefix: hashPrefix,
+                        expiresIn: 180
+                    )
+                } catch {
+                    // Companion became unreachable between isConnected check and call.
+                    // The approval was already created — it will expire in 3 minutes.
+                    // Log but return 202 since the code exists (user can /capabilities or reconnect companion).
+                    await auditLogger.log(
+                        action: "sign",
+                        target: target,
+                        value: valueStr,
+                        decision: "warning",
+                        reason: "Companion notification failed: \(error.localizedDescription)"
+                    )
+                }
 
                 await auditLogger.log(
                     action: "sign",
@@ -189,7 +209,7 @@ struct SignHandler {
                     "status": "approval_required",
                     "reason": reason,
                     "summary": decoded.summary,
-                    "approvalHashPrefix": String(hashPrefix),
+                    "approvalHashPrefix": hashPrefix,
                     "expiresIn": 180,
                 ])
             }

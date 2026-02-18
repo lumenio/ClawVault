@@ -8,6 +8,11 @@
     <array>
         <string>/usr/local/bin/ClawVaultDaemon</string>
     </array>
+    <key>MachServices</key>
+    <dict>
+        <key>com.clawvault.daemon</key>
+        <true/>
+    </dict>
     <key>RunAtLoad</key>
     <true/>
     <key>KeepAlive</key>

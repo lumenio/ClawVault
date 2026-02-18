@@ -51,6 +51,13 @@ actor SecureEnclaveManager {
         }
     }
 
+    /// Get the raw SE signing key for config integrity signing.
+    /// The returned key can sign config data without user interaction.
+    func signingKeyForConfig() throws -> SecureEnclave.P256.Signing.PrivateKey {
+        guard let key = signingKey else { throw KeyError.keyNotFound }
+        return key
+    }
+
     /// Sign data with the admin key (requires Touch ID).
     func adminSign(_ data: Data) throws -> Data {
         guard let key = adminKey else { throw KeyError.keyNotFound }

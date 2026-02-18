@@ -18,12 +18,12 @@ OpenClaw Agent (LLM)
 └────────────┬───────────────┘
              │  Unix socket (same-user only)
              ▼
-┌────────────────────────────┐
-│  Signing Daemon (Swift)    │  TRUSTED (local process)
-│  - Policy enforcement      │  Owns UserOp construction
-│  - Secure Enclave signing  │  Gas preflight check
-│  - Approval gating         │  Touch ID for admin ops
-└────────────┬───────────────┘
+┌────────────────────────────┐       XPC (Mach service)       ┌──────────────────────────┐
+│  Signing Daemon (Swift)    │◄──────────────────────────────►│  Companion App (SwiftUI) │
+│  - Policy enforcement      │  Owns UserOp construction      │  - Touch ID prompts      │
+│  - Secure Enclave signing  │  Gas preflight check           │  - Approval UI           │
+│  - Freeze integrity sync   │  On-chain freeze sync          │  - Menu bar status       │
+└────────────┬───────────────┘                                 └──────────────────────────┘
              │  signed UserOperation
              ▼
 ┌────────────────────────────┐
@@ -60,12 +60,23 @@ macOS background service. Zero external dependencies -- CryptoKit + Foundation o
 - **Secure Enclave** -- Two P-256 keys: signing key (no user presence, for routine ops) and admin key (Touch ID required, for policy changes).
 - **Policy Engine** -- Default-deny. Evaluates every signing request against spending limits, selector blocklists, protocol allowlists, and slippage limits.
 - **Slippage Verification** -- Decodes Uniswap V3 Universal Router calldata, queries QuoterV2 for fresh market prices, rejects swaps exceeding profile slippage limits.
-- **Approval Manager** -- 8-digit codes via macOS notification. Rate-limited (3 failures per approval, 5/min global). 3-minute expiry.
+- **Approval Manager** -- 8-digit codes shared with companion app over XPC. Rate-limited (3 failures per approval, 5/min global). 3-minute expiry.
 - **UserOp Builder** -- Constructs complete ERC-4337 UserOperations with gas estimation via Pimlico bundler.
 - **Audit Logger** -- Append-only log with redaction (no approval codes or key material).
 - **Unix Socket API** -- `~/.clawvault/daemon.sock` with peer UID verification. HTTP-style request/response over the socket.
 
 Runs as a `launchd` LaunchAgent (`com.clawvault.daemon`).
+
+### `companion/` -- Menu Bar App
+
+SwiftUI menu bar app (`LSUIElement`). Handles all human-facing interactions.
+
+- **Touch ID Prompts** -- `LAContext` biometric authentication for admin operations (policy changes, allowlist edits, unfreeze).
+- **Approval UI** -- SwiftUI sheet displaying transaction details and approval code entry.
+- **Freeze Status** -- Menu bar icon shows wallet freeze state.
+- **XPC Connection** -- Bidirectional Mach service communication with the daemon. Code-signing verified in release builds.
+
+Required for admin operations. Routine signing within policy works without the companion.
 
 ### `skill/` -- OpenClaw Skill
 
@@ -140,6 +151,9 @@ cd contracts && forge build
 # Daemon
 cd daemon && swift build
 
+# Companion app
+cd companion && swift build
+
 # Skill
 cd skill && npm install
 ```
@@ -157,6 +171,9 @@ cd daemon && swift test
 ### Install Daemon
 
 ```bash
+# Configure your Apple Developer Team ID (required for release builds)
+scripts/configure-team-id.sh YOUR_TEAM_ID
+
 # Build release
 cd daemon && swift build -c release
 
@@ -186,8 +203,9 @@ This generates Secure Enclave keys, creates the config at `~/.clawvault/config.j
 | `/decode` | POST | Socket | Human-readable intent summary |
 | `/sign` | POST | Socket | Policy-checked signing and submission |
 | `/policy` | GET | Socket | Current policy config |
-| `/policy/update` | POST | Socket + Touch ID | Update policy (local confirmation dialog) |
-| `/allowlist` | POST | Socket + Touch ID | Manage address allowlist |
+| `/policy/update` | POST | Socket + Companion | Update policy (companion shows confirmation + Touch ID) |
+| `/allowlist` | POST | Socket + Companion | Manage address allowlist |
+| `/unfreeze` | POST | Socket + Companion | Unfreeze wallet (verifies on-chain state first) |
 | `/panic` | POST | Socket | Emergency freeze |
 | `/audit-log` | GET | Socket | Append-only audit log |
 

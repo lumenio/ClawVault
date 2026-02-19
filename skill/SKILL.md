@@ -3,7 +3,7 @@ name: monolith
 description: Secure crypto wallet for AI agents. Hardware-isolated keys (Apple Secure Enclave), ERC-4337 smart wallet, on-chain spending caps, default-deny policy engine.
 homepage: https://github.com/slaviquee/monolith
 source: https://github.com/slaviquee/monolith/tree/main/skill
-metadata: {"openclaw":{"displayName":"Monolith","source":"https://github.com/slaviquee/monolith/tree/main/skill","homepage":"https://github.com/slaviquee/monolith","requires":{"bins":["MonolithDaemon"]},"install":[{"id":"daemon-pkg","kind":"download","label":"Install Monolith Daemon (macOS pkg)","url":"https://github.com/slaviquee/monolith/releases/download/v0.1.3/MonolithDaemon-v0.1.3.pkg","os":"darwin"},{"id":"companion-zip","kind":"download","label":"Download Monolith Companion (macOS app zip)","url":"https://github.com/slaviquee/monolith/releases/download/v0.1.3/MonolithCompanion.app.zip","os":"darwin"}]},"clawdbot":{"displayName":"Monolith","source":"https://github.com/slaviquee/monolith/tree/main/skill","homepage":"https://github.com/slaviquee/monolith","requires":{"bins":["MonolithDaemon"]},"install":[{"id":"daemon-pkg","kind":"download","label":"Install Monolith Daemon (macOS pkg)","url":"https://github.com/slaviquee/monolith/releases/download/v0.1.3/MonolithDaemon-v0.1.3.pkg","os":"darwin"},{"id":"companion-zip","kind":"download","label":"Download Monolith Companion (macOS app zip)","url":"https://github.com/slaviquee/monolith/releases/download/v0.1.3/MonolithCompanion.app.zip","os":"darwin"}]}}
+metadata: {"openclaw":{"displayName":"Monolith","source":"https://github.com/slaviquee/monolith/tree/main/skill","homepage":"https://github.com/slaviquee/monolith","os":["darwin"],"requires":{"bins":["MonolithDaemon"]},"install":[{"id":"daemon-pkg","kind":"download","label":"Install Monolith Daemon (macOS pkg)","url":"https://github.com/slaviquee/monolith/releases/download/v0.1.3/MonolithDaemon-v0.1.3.pkg","os":["darwin"]},{"id":"companion-zip","kind":"download","label":"Download Monolith Companion (macOS app zip)","url":"https://github.com/slaviquee/monolith/releases/download/v0.1.3/MonolithCompanion.app.zip","os":["darwin"]}]},"clawdbot":{"displayName":"Monolith","source":"https://github.com/slaviquee/monolith/tree/main/skill","homepage":"https://github.com/slaviquee/monolith","os":["darwin"],"requires":{"bins":["MonolithDaemon"]},"install":[{"id":"daemon-pkg","kind":"download","label":"Install Monolith Daemon (macOS pkg)","url":"https://github.com/slaviquee/monolith/releases/download/v0.1.3/MonolithDaemon-v0.1.3.pkg","os":["darwin"]},{"id":"companion-zip","kind":"download","label":"Download Monolith Companion (macOS app zip)","url":"https://github.com/slaviquee/monolith/releases/download/v0.1.3/MonolithCompanion.app.zip","os":["darwin"]}]}}
 ---
 
 # Monolith — Crypto Wallet Skill
@@ -54,11 +54,21 @@ Secure crypto wallet for OpenClaw agents. Monolith combines hardware-isolated ke
 
 ## Setup
 
-1. Install Monolith from ClawHub (macOS install entries provide daemon + companion downloads)
-2. Run `monolith setup` to verify wallet status and print manual startup commands if daemon/companion are not running
-3. If setup reports missing local components, install `MonolithDaemon.pkg` and `MonolithCompanion.app` from the release assets
-4. Fund the wallet address with ETH on your chosen chain
-5. Start transacting
+1. Install Monolith from ClawHub: `clawhub install monolith`
+2. Start a new OpenClaw session so the skill is loaded.
+3. Install local macOS components from the install entries:
+   - `MonolithDaemon-v0.1.3.pkg` (admin/root install)
+   - `MonolithCompanion.app.zip` (extract app to `/Applications` and open once)
+4. Start daemon first, then companion. If companion was opened before daemon, restart companion after daemon is running.
+5. Run `monolith setup` to verify daemon/companion connectivity and wallet status.
+6. Fund the wallet address with ETH on your chosen chain.
+7. Start transacting.
+
+### First-Install Notes (OpenClaw bot/operator)
+
+- Approval flows (Touch ID + notifications) require an active logged-in macOS GUI session.
+- Headless-only SSH sessions cannot complete biometric/notification approval steps.
+- `monolith setup` is the canonical health check before attempting `send`, `swap`, `policy`, or `allowlist` commands.
 
 ## Error Handling
 

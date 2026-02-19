@@ -8,6 +8,18 @@ async function main() {
   try {
     const status = await runSetupWizard();
 
+    if (status.bootstrap?.attempted) {
+      if (status.daemon?.running) {
+        console.log('Bootstrap: daemon auto-start attempted.');
+      } else {
+        console.log('Bootstrap: auto-start attempted but daemon remains unreachable.');
+      }
+
+      for (const message of status.bootstrap.messages || []) {
+        console.log(`  ${message}`);
+      }
+    }
+
     if (status.error) {
       console.error(`Setup error: ${status.error}`);
       process.exit(1);

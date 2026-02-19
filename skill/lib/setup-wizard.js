@@ -1,4 +1,5 @@
 import { daemon } from './daemon-client.js';
+import { attemptRuntimeBootstrap } from './runtime-bootstrap.js';
 
 /**
  * Setup flow for ClawVault (per spec §3.2).
@@ -21,16 +22,47 @@ export async function checkDaemonHealth() {
   }
 }
 
+function sleep(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function waitForHealthyDaemon(maxAttempts = 10, delayMs = 400) {
+  for (let i = 0; i < maxAttempts; i += 1) {
+    const health = await checkDaemonHealth();
+    if (health.running) {
+      return health;
+    }
+    await sleep(delayMs);
+  }
+  return { running: false, version: null };
+}
+
+function buildBootstrapFailureMessage(bootstrap) {
+  const base = 'The ClawVault daemon is not running and auto-start failed.';
+  if (!bootstrap?.messages?.length) {
+    return `${base} Install ClawVaultDaemon.pkg, then run setup again.`;
+  }
+  return `${base} ${bootstrap.messages.join(' ')}`;
+}
+
 /**
  * Get the wallet address and setup status.
  */
 export async function getSetupStatus() {
   try {
-    const health = await checkDaemonHealth();
+    let health = await checkDaemonHealth();
+    let bootstrap = null;
+
+    if (!health.running) {
+      bootstrap = attemptRuntimeBootstrap();
+      health = await waitForHealthyDaemon();
+    }
+
     if (!health.running) {
       return {
         step: 'daemon_not_running',
-        message: 'The ClawVault daemon is not running. Please start it first.',
+        message: buildBootstrapFailureMessage(bootstrap),
+        bootstrap,
       };
     }
 
@@ -52,6 +84,7 @@ export async function getSetupStatus() {
       profile: caps.data?.profile,
       frozen: caps.data?.frozen,
       gasStatus: caps.data?.gasStatus,
+      bootstrap,
     };
   } catch (err) {
     return {
@@ -79,15 +112,21 @@ export async function runSetupWizard() {
     wallet: null,
     capabilities: null,
     policy: null,
+    bootstrap: null,
     error: null,
   };
 
   // Step 1: Check daemon health
   try {
-    const health = await checkDaemonHealth();
+    let health = await checkDaemonHealth();
+    if (!health.running) {
+      result.bootstrap = attemptRuntimeBootstrap();
+      health = await waitForHealthyDaemon();
+    }
+
     result.daemon = health;
     if (!health.running) {
-      result.error = 'The ClawVault daemon is not running. Please start it first.';
+      result.error = buildBootstrapFailureMessage(result.bootstrap);
       return result;
     }
   } catch (err) {

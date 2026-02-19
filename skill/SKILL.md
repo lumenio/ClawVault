@@ -52,10 +52,11 @@ Secure crypto wallet for OpenClaw agents. Hardware-isolated keys (Apple Secure E
 
 ## Setup
 
-1. Install the ClawVault daemon (macOS only, requires Apple Silicon or T2)
-2. Run: `clawvault setup` to generate keys and configure
-3. Fund the wallet address with ETH on your chosen chain
-4. Start transacting
+1. Install ClawVault from ClawHub (macOS install entries provide daemon + companion downloads)
+2. Run `clawvault setup` to auto-start daemon/companion and verify wallet status
+3. If setup reports missing local components, install `ClawVaultDaemon.pkg` and `ClawVaultCompanion.app` from the release assets
+4. Fund the wallet address with ETH on your chosen chain
+5. Start transacting
 
 ## Error Handling
 

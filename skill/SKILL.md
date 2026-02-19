@@ -1,12 +1,12 @@
 ---
 name: clawvault
-description: Secure crypto wallet for OpenClaw with Secure Enclave signing and policy-gated approvals.
+description: Production-ready OpenClaw crypto wallet with Secure Enclave signing, policy-based autopilot, and human approvals for risky actions.
 metadata: {"openclaw":{"displayName":"ClawVault","source":"https://github.com/lumenio/ClawVault/tree/main/skill","homepage":"https://github.com/lumenio/ClawVault","requires":{"bins":["ClawVaultDaemon"]},"install":[{"kind":"download","label":"Install ClawVault Daemon (macOS pkg)","url":"https://github.com/lumenio/ClawVault/releases/download/v0.1.1/ClawVaultDaemon-v0.1.1.pkg","os":"darwin"},{"kind":"download","label":"Download ClawVault Companion (macOS app zip)","url":"https://github.com/lumenio/ClawVault/releases/download/v0.1.0/ClawVaultCompanion.app.zip","os":"darwin"}]}}
 ---
 
 # ClawVault — Crypto Wallet Skill
 
-Secure crypto wallet for OpenClaw agents. Hardware-isolated keys (Apple Secure Enclave), on-chain spending caps, ERC-4337 smart wallet.
+Secure crypto wallet for OpenClaw agents. ClawVault combines hardware-isolated keys (Apple Secure Enclave), on-chain spending controls, and policy-gated approvals so agents can transact safely without exposing private keys.
 
 ## Commands
 

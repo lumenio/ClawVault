@@ -2,7 +2,7 @@
 
 Secure crypto wallet for AI agents. Hardware-isolated keys, on-chain spending caps, default-deny policy engine.
 
-ClawVault lets [OpenClaw](https://github.com/ArcadeLabsInc/openclaw) agents hold funds, transact on-chain, and maintain a verifiable identity -- without ever exposing private keys to the LLM, the network, or any third party.
+ClawVault lets OpenClaw agents hold funds, transact on-chain, and maintain a verifiable identity -- without ever exposing private keys to the LLM, the network, or any third party.
 
 ## Architecture
 
@@ -72,7 +72,7 @@ Runs as a `launchd` LaunchAgent (`com.clawvault.daemon`).
 SwiftUI menu bar app (`LSUIElement`). Handles all human-facing interactions.
 
 - **Touch ID Prompts** -- `LAContext` biometric authentication for admin operations (policy changes, allowlist edits, unfreeze).
-- **Approval UI** -- SwiftUI sheet displaying transaction details and approval code entry.
+- **Approval UI** -- SwiftUI sheet displaying trusted admin-action summaries; approval codes are delivered through system notifications and hidden in the menu list.
 - **Freeze Status** -- Menu bar icon shows wallet freeze state.
 - **XPC Connection** -- Bidirectional Mach service communication with the daemon. Code-signing verified in release builds.
 
@@ -142,7 +142,18 @@ Freezing is fast and easy. Unfreezing is slow and deliberate.
 
 ## Quick Start
 
-### Build
+### Production Install (Recommended)
+
+Install signed and notarized artifacts from the latest release:
+
+- Daemon installer package (`ClawVaultDaemon.pkg`)
+- Companion app archive (`ClawVaultCompanion.app.zip`)
+
+Release page: <https://github.com/lumenio/ClawVault/releases/latest>
+
+After installing both components, run `clawvault setup`. The setup flow now attempts to auto-start the daemon and companion and prints actionable diagnostics if a local component is missing.
+
+### Build From Source (Developer)
 
 ```bash
 # Contracts
@@ -168,7 +179,7 @@ cd contracts && forge test
 cd daemon && swift test
 ```
 
-### Install Daemon
+### Manual Daemon Install (Developer)
 
 ```bash
 # Configure your Apple Developer Team ID (required for release builds)
@@ -182,7 +193,9 @@ cp .build/release/ClawVaultDaemon /usr/local/bin/
 
 # Install launchd agent
 cp com.clawvault.daemon.plist ~/Library/LaunchAgents/
-launchctl load ~/Library/LaunchAgents/com.clawvault.daemon.plist
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.clawvault.daemon.plist
+launchctl enable gui/$(id -u)/com.clawvault.daemon
+launchctl kickstart -k gui/$(id -u)/com.clawvault.daemon
 ```
 
 ### First Run
@@ -191,7 +204,7 @@ launchctl load ~/Library/LaunchAgents/com.clawvault.daemon.plist
 cd skill && node scripts/setup.js
 ```
 
-This generates Secure Enclave keys, creates the config at `~/.clawvault/config.json`, and displays your wallet address.
+On first run, this creates Secure Enclave keys, creates the config at `~/.clawvault/config.json`, and displays your wallet address. If daemon/companion is not installed or not running, setup prints concrete remediation steps.
 
 ## Daemon API
 

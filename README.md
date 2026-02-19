@@ -1,8 +1,8 @@
-# ClawVault
+# Monolith
 
 Secure crypto wallet for AI agents. Hardware-isolated keys, on-chain spending caps, default-deny policy engine.
 
-ClawVault lets OpenClaw agents hold funds, transact on-chain, and maintain a verifiable identity -- without ever exposing private keys to the LLM, the network, or any third party.
+Monolith lets OpenClaw agents hold funds, transact on-chain, and maintain a verifiable identity -- without ever exposing private keys to the LLM, the network, or any third party.
 
 ## Architecture
 
@@ -46,8 +46,8 @@ The key security insight: **the skill is untrusted**. A fully compromised LLM or
 
 ERC-4337 smart wallet with P-256 signature verification, on-chain spending caps, and recovery.
 
-- **ClawVaultWallet** -- Single-owner P-256 wallet. `validateUserOp` verifies signatures using the precompile at `0x100` (EIP-7951/RIP-7212) with Daimo P256Verifier fallback. Raw `r||s` signature format with low-S enforcement.
-- **ClawVaultFactory** -- CREATE2 deterministic deployment. Compatible with ERC-4337 `initCode` pattern.
+- **MonolithWallet** -- Single-owner P-256 wallet. `validateUserOp` verifies signatures using the precompile at `0x100` (EIP-7951/RIP-7212) with Daimo P256Verifier fallback. Raw `r||s` signature format with low-S enforcement.
+- **MonolithFactory** -- CREATE2 deterministic deployment. Compatible with ERC-4337 `initCode` pattern.
 - **Spending Policy** -- Daily cap tracking both native ETH and ERC-20 transfers (`transfer` + `transferFrom`). Known stablecoin registry per-chain.
 - **Recovery** -- `freeze()` (instant, callable by signer or recovery address), `unfreeze` (10min timelock), `initiateKeyRotation` (auto-freezes, 48h timelock).
 
@@ -63,9 +63,9 @@ macOS background service. Zero external dependencies -- CryptoKit + Foundation o
 - **Approval Manager** -- 8-digit codes shared with companion app over XPC. Rate-limited (3 failures per approval, 5/min global). 3-minute expiry.
 - **UserOp Builder** -- Constructs complete ERC-4337 UserOperations with gas estimation via Pimlico bundler.
 - **Audit Logger** -- Append-only log with redaction (no approval codes or key material).
-- **Unix Socket API** -- `~/.clawvault/daemon.sock` with peer UID verification. HTTP-style request/response over the socket.
+- **Unix Socket API** -- `~/.monolith/daemon.sock` with peer UID verification. HTTP-style request/response over the socket.
 
-Runs as a `launchd` LaunchAgent (`com.clawvault.daemon`).
+Runs as a `launchd` LaunchAgent (`com.monolith.daemon`).
 
 ### `companion/` -- Menu Bar App
 
@@ -146,12 +146,12 @@ Freezing is fast and easy. Unfreezing is slow and deliberate.
 
 Install signed and notarized artifacts from the latest release:
 
-- Daemon installer package (`ClawVaultDaemon.pkg`)
-- Companion app archive (`ClawVaultCompanion.app.zip`)
+- Daemon installer package (`MonolithDaemon.pkg`)
+- Companion app archive (`MonolithCompanion.app.zip`)
 
-Release page: <https://github.com/lumenio/ClawVault/releases/latest>
+Release page: <https://github.com/slaviquee/monolith/releases/latest>
 
-After installing both components, run `clawvault setup`. The setup flow now attempts to auto-start the daemon and companion and prints actionable diagnostics if a local component is missing.
+After installing both components, run `monolith setup`. The setup flow now attempts to auto-start the daemon and companion and prints actionable diagnostics if a local component is missing.
 
 ### Build From Source (Developer)
 
@@ -189,13 +189,13 @@ scripts/configure-team-id.sh YOUR_TEAM_ID
 cd daemon && swift build -c release
 
 # Copy binary
-cp .build/release/ClawVaultDaemon /usr/local/bin/
+cp .build/release/MonolithDaemon /usr/local/bin/
 
 # Install launchd agent
-cp com.clawvault.daemon.plist ~/Library/LaunchAgents/
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.clawvault.daemon.plist
-launchctl enable gui/$(id -u)/com.clawvault.daemon
-launchctl kickstart -k gui/$(id -u)/com.clawvault.daemon
+cp com.monolith.daemon.plist ~/Library/LaunchAgents/
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.monolith.daemon.plist
+launchctl enable gui/$(id -u)/com.monolith.daemon
+launchctl kickstart -k gui/$(id -u)/com.monolith.daemon
 ```
 
 ### First Run
@@ -204,7 +204,7 @@ launchctl kickstart -k gui/$(id -u)/com.clawvault.daemon
 cd skill && node scripts/setup.js
 ```
 
-On first run, this creates Secure Enclave keys, creates the config at `~/.clawvault/config.json`, and displays your wallet address. If daemon/companion is not installed or not running, setup prints concrete remediation steps.
+On first run, this creates Secure Enclave keys, creates the config at `~/.monolith/config.json`, and displays your wallet address. If daemon/companion is not installed or not running, setup prints concrete remediation steps.
 
 ## Daemon API
 

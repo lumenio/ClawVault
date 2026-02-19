@@ -1,8 +1,8 @@
 {
-  "name": "clawvault-skill",
+  "name": "monolith-skill",
   "version": "0.1.0",
   "type": "module",
-  "description": "ClawVault crypto wallet skill for OpenClaw agents",
+  "description": "Monolith crypto wallet skill for OpenClaw agents",
   "scripts": {
     "send": "node scripts/send.js",
     "swap": "node scripts/swap.js",

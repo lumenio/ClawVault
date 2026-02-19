@@ -20,8 +20,8 @@ contracts/broadcast/
 node_modules/
 skill/node_modules/
 
-# ClawVault runtime
-.clawvault/
+# Monolith runtime
+.monolith/
 
 # Environment / secrets
 .env

@@ -84,7 +84,7 @@ export const QUOTER_V2_ABI = [
 
 // Daemon socket path
 export const SOCKET_PATH =
-  process.env.CLAWVAULT_SOCKET || `${process.env.HOME}/.clawvault/daemon.sock`;
+  process.env.MONOLITH_SOCKET || `${process.env.HOME}/.monolith/daemon.sock`;
 
 // Common ABIs for encoding
 export const ERC20_TRANSFER_ABI = [

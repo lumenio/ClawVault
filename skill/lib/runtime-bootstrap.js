@@ -1,20 +1,20 @@
 import fs from 'node:fs';
 import { execFileSync } from 'node:child_process';
 
-const DAEMON_LABEL = 'com.clawvault.daemon';
+const DAEMON_LABEL = 'com.monolith.daemon';
 const DAEMON_BINARY =
-  process.env.CLAWVAULT_DAEMON_BIN || '/usr/local/bin/ClawVaultDaemon';
+  process.env.MONOLITH_DAEMON_BIN || '/usr/local/bin/MonolithDaemon';
 
 const LAUNCH_AGENT_PATHS = [
-  process.env.CLAWVAULT_DAEMON_PLIST || '',
-  `${process.env.HOME}/Library/LaunchAgents/com.clawvault.daemon.plist`,
-  '/Library/LaunchAgents/com.clawvault.daemon.plist',
+  process.env.MONOLITH_DAEMON_PLIST || '',
+  `${process.env.HOME}/Library/LaunchAgents/com.monolith.daemon.plist`,
+  '/Library/LaunchAgents/com.monolith.daemon.plist',
 ].filter(Boolean);
 
 const COMPANION_PATHS = [
-  process.env.CLAWVAULT_COMPANION_APP || '',
-  '/Applications/ClawVaultCompanion.app',
-  `${process.env.HOME}/Applications/ClawVaultCompanion.app`,
+  process.env.MONOLITH_COMPANION_APP || '',
+  '/Applications/MonolithCompanion.app',
+  `${process.env.HOME}/Applications/MonolithCompanion.app`,
 ].filter(Boolean);
 
 function runCommand(command, args) {
@@ -57,7 +57,7 @@ export function attemptRuntimeBootstrap() {
 
   if (!fs.existsSync(DAEMON_BINARY)) {
     result.messages.push(
-      `Daemon binary not found at ${DAEMON_BINARY}. Install ClawVaultDaemon.pkg and retry setup.`
+      `Daemon binary not found at ${DAEMON_BINARY}. Install MonolithDaemon.pkg and retry setup.`
     );
     return result;
   }

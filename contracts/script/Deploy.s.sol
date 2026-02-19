@@ -2,7 +2,7 @@
 pragma solidity ^0.8.28;
 
 import {Script, console} from "forge-std/Script.sol";
-import {ClawVaultFactory} from "../src/ClawVaultFactory.sol";
+import {MonolithFactory} from "../src/MonolithFactory.sol";
 import {IEntryPoint} from "account-abstraction/interfaces/IEntryPoint.sol";
 
 contract Deploy is Script {
@@ -12,7 +12,7 @@ contract Deploy is Script {
     function run() external {
         vm.startBroadcast();
 
-        ClawVaultFactory factory = new ClawVaultFactory(IEntryPoint(ENTRY_POINT));
+        MonolithFactory factory = new MonolithFactory(IEntryPoint(ENTRY_POINT));
         console.log("Factory deployed at:", address(factory));
 
         vm.stopBroadcast();

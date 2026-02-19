@@ -5,19 +5,19 @@
 # Usage:
 #   cd daemon && swift build && ../scripts/codesign-dev.sh
 #
-# NOTE: This does NOT create ~/.clawvault/dev-mode.
+# NOTE: This does NOT create ~/.monolith/dev-mode.
 # To enable relaxed XPC validation in debug builds, manually run:
-#   touch ~/.clawvault/dev-mode
+#   touch ~/.monolith/dev-mode
 # This prevents accidental weakening of security.
 
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 DAEMON_DIR="$SCRIPT_DIR/../daemon"
-ENTITLEMENTS="$DAEMON_DIR/ClawVaultDaemon.entitlements"
+ENTITLEMENTS="$DAEMON_DIR/MonolithDaemon.entitlements"
 
 # Find the built binary
-BINARY="$DAEMON_DIR/.build/debug/ClawVaultDaemon"
+BINARY="$DAEMON_DIR/.build/debug/MonolithDaemon"
 if [ ! -f "$BINARY" ]; then
     echo "ERROR: Binary not found at $BINARY"
     echo "Run 'cd daemon && swift build' first."
@@ -34,4 +34,4 @@ codesign --force -s - --entitlements "$ENTITLEMENTS" "$BINARY"
 echo "Done. Binary is ad-hoc signed with Secure Enclave entitlements."
 echo ""
 echo "To enable relaxed XPC validation (debug builds only):"
-echo "  touch ~/.clawvault/dev-mode"
+echo "  touch ~/.monolith/dev-mode"

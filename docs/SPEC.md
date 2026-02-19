@@ -1,4 +1,4 @@
-# ClawVault — Technical Specification
+# Monolith — Technical Specification
 
 **Version 0.6.0** · February 2026 · DRAFT
 
@@ -8,7 +8,7 @@ Secure Crypto Identity & Wallet Skill for OpenClaw
 
 ## 1. Scope & Goals
 
-ClawVault enables OpenClaw agents to hold funds, transact on-chain, and maintain a verifiable identity — without ever exposing private keys to the LLM, the network, or any third party.
+Monolith enables OpenClaw agents to hold funds, transact on-chain, and maintain a verifiable identity — without ever exposing private keys to the LLM, the network, or any third party.
 
 ### 1.1 Security Goals
 
@@ -45,7 +45,7 @@ OpenClaw Agent (LLM)
   │  natural language → structured intent
   ▼
 ┌────────────────────────────┐
-│  ClawVault Skill           │  UNTRUSTED
+│  Monolith Skill           │  UNTRUSTED
 │  Emits: { target,          │  Runs inside OpenClaw
 │    calldata, value }       │  NO nonce/gas/fees
 └────────────┬───────────────┘
@@ -81,13 +81,13 @@ OpenClaw Agent (LLM)
 
 ### 3.1 What Ships
 
-ClawVault is distributed as three components:
+Monolith is distributed as three components:
 
-1. **ClawVault Skill** — a standard OpenClaw skill (`SKILL.md` + Node/shell scripts) published on ClawHub. This is what the LLM interacts with. It parses natural language into structured intents and communicates with the daemon over the Unix socket. It handles ENS resolution and ERC-8004 identity queries (read-only, no signing). The skill is installed via ClawHub like any other skill.
+1. **Monolith Skill** — a standard OpenClaw skill (`SKILL.md` + Node/shell scripts) published on ClawHub. This is what the LLM interacts with. It parses natural language into structured intents and communicates with the daemon over the Unix socket. It handles ENS resolution and ERC-8004 identity queries (read-only, no signing). The skill is installed via ClawHub like any other skill.
 
 2. **Companion App** (`.app` bundle) — a minimal SwiftUI menu bar application (`LSUIElement = YES`, no dock icon). Provides all user-facing UI: Touch ID prompts via `LAContext`, approval notification display, pending approvals list. Connects to the daemon via bidirectional XPC (Mach service). The companion does NOT access Secure Enclave keys — the daemon owns them exclusively. Companion quit does not affect routine `/sign` operations; the daemon runs independently.
 
-3. **Signing Daemon** — a signed and notarized macOS binary. Runs as a LaunchAgent with a stable Mach service name (`com.clawvault.daemon`). Registered via `~/Library/LaunchAgents/com.clawvault.daemon.plist` with `MachServices` dictionary. The daemon is the XPC Mach service; the companion connects to it. Daemon lifecycle is independent of the companion.
+3. **Signing Daemon** — a signed and notarized macOS binary. Runs as a LaunchAgent with a stable Mach service name (`com.monolith.daemon`). Registered via `~/Library/LaunchAgents/com.monolith.daemon.plist` with `MachServices` dictionary. The daemon is the XPC Mach service; the companion connects to it. Daemon lifecycle is independent of the companion.
 
 Build-from-source is available for developers but is not the default path. The Secure Enclave and Keychain require proper code-signing entitlements baked into the distributed binary. Developers must ad-hoc sign after `swift build` — see Developer Notes appendix.
 
@@ -96,19 +96,19 @@ Build-from-source is available for developers but is not the default path. The S
 The entire setup is driven from the OpenClaw chat interface. The user never leaves the conversation.
 
 **Step 1 — Install skill:**
-The user installs ClawVault from ClawHub, either via the ClawHub UI or by telling the agent:
-> "Install ClawVault from github.com/clawvault/skill"
+The user installs Monolith from ClawHub, either via the ClawHub UI or by telling the agent:
+> "Install Monolith from github.com/monolith/skill"
 
 **Step 2 — Setup wizard:**
 The user tells the agent:
-> "Set up my ClawVault wallet"
+> "Set up my Monolith wallet"
 
 This triggers an interactive setup sequence:
 
 1. Skill downloads the signed daemon binary (notarized `.dmg`, ~5 seconds).
 2. User approves the macOS install (standard Gatekeeper flow).
 3. Daemon launches and generates a P-256 signing key in the Secure Enclave. The key is created **without** a user-presence requirement — it can sign routine UserOps autonomously, without Touch ID prompts. (A separate admin key with `.userPresence` is created for policy-mutating operations — see §5.1.)
-4. Daemon creates the Unix socket at `~/.clawvault/daemon.sock` (`0600`, directory `0700`).
+4. Daemon creates the Unix socket at `~/.monolith/daemon.sock` (`0600`, directory `0700`).
 5. **User selects home chain:** **Ethereum Mainnet (chainId 1)** or **Base (chainId 8453)**.
 6. **User selects security profile:** **Balanced** (recommended) or **Autonomous**. See §6.2 for profile details.
 7. Daemon configures the policy engine with the selected profile's limits and protocol pack for the chosen chain.
@@ -123,7 +123,7 @@ After setup, the daemon runs as a background process (launchd service on macOS).
 
 ### 3.3 User Interaction Model
 
-**Minimal menu bar companion.** The user interacts with ClawVault primarily through the OpenClaw chat. A lightweight menu bar companion app handles the few operations requiring native macOS UI: Touch ID prompts (via `LAContext`), admin confirmation dialogs (SwiftUI sheets), and approval code display. The companion communicates with the daemon over verified XPC — the skill/LLM cannot access this channel.
+**Minimal menu bar companion.** The user interacts with Monolith primarily through the OpenClaw chat. A lightweight menu bar companion app handles the few operations requiring native macOS UI: Touch ID prompts (via `LAContext`), admin confirmation dialogs (SwiftUI sheets), and approval code display. The companion communicates with the daemon over verified XPC — the skill/LLM cannot access this channel.
 
 Example commands:
 
@@ -182,7 +182,7 @@ The daemon MUST ignore and discard any additional fields (nonce, gas, fees, sign
 The daemon's local security boundary is the Unix domain socket with OS-level access control. There is no shared secret or HMAC scheme.
 
 - **Transport:** Unix domain socket only. No TCP listener. The daemon MUST NOT expose any network-reachable interface.
-- **Socket permissions:** Directory `~/.clawvault/` at `0700`, socket `daemon.sock` at `0600` (owner-only). See [Appendix A](#appendix-a-socket--access-control-details) for startup hygiene.
+- **Socket permissions:** Directory `~/.monolith/` at `0700`, socket `daemon.sock` at `0600` (owner-only). See [Appendix A](#appendix-a-socket--access-control-details) for startup hygiene.
 - **Peer UID verification:** On every incoming connection, the daemon MUST verify the connecting process's UID matches the daemon's own UID (via `SO_PEERCRED`, `getpeereid()`, or equivalent). Connections from other OS users MUST be rejected.
 - **No shared secrets:** The skill does not need to read or store any authentication token. If it can connect to the socket, it is the same OS user — that is the only client authentication needed for MVP.
 
@@ -351,7 +351,7 @@ Default-safe autonomous actions (no approval needed within limits):
 
 ### 6.5 User-Paid Gas (No Paymasters)
 
-ClawVault does not use paymasters. All UserOperations are **self-funded**.
+Monolith does not use paymasters. All UserOperations are **self-funded**.
 
 - The `paymasterAndData` field MUST be empty (unset) on every UserOperation.
 - The smart wallet MUST maintain a **native ETH balance** on the home chain sufficient to cover gas.
@@ -398,7 +398,7 @@ Implementers MUST NOT use the reduced ApprovalHash for the Secure Enclave signat
 When a transaction exceeds policy or involves unknown calldata, the daemon MUST initiate a code-based approval flow.
 
 1. Daemon detects policy exception.
-2. **Fail closed:** If the companion app is not connected, the daemon MUST NOT create the pending approval. Return 503 ("Companion app required for approvals — please start ClawVault.app").
+2. **Fail closed:** If the companion app is not connected, the daemon MUST NOT create the pending approval. Return 503 ("Companion app required for approvals — please start Monolith.app").
 3. Daemon generates a single-use **8-digit** code and computes the ApprovalHash.
 4. Daemon calls `companion.postApprovalNotification()` via XPC. The companion stores the approval in its menu bar pending list (always visible regardless of macOS notification settings / Focus / DND) and attempts a macOS system notification (best-effort). Returns `true` if stored, regardless of notification delivery.
 5. User sees the code in the companion's menu bar dropdown and/or macOS notification. User replies with the code in the OpenClaw chat.
@@ -430,11 +430,11 @@ UserOperations are not mined directly. An ERC-4337 **bundler** is a service that
 2. Simulates them to verify they will succeed and pay for themselves.
 3. Batches one or more UserOps into a single on-chain `handleOps()` transaction submitted to the EntryPoint contract.
 
-The bundler pays the outer transaction gas upfront and is reimbursed by the EntryPoint from the sender's (wallet's) deposit or balance. In ClawVault's no-paymaster model, **the user ultimately pays all gas costs** — the bundler is an intermediary that fronts the ETH and gets repaid atomically on-chain.
+The bundler pays the outer transaction gas upfront and is reimbursed by the EntryPoint from the sender's (wallet's) deposit or balance. In Monolith's no-paymaster model, **the user ultimately pays all gas costs** — the bundler is an intermediary that fronts the ETH and gets repaid atomically on-chain.
 
 ### 8.2 Default Bundler Provider
 
-ClawVault uses **Pimlico public bundler endpoints** as the default. No API key is required.
+Monolith uses **Pimlico public bundler endpoints** as the default. No API key is required.
 
 | Chain | Endpoint |
 |---|---|
@@ -570,7 +570,7 @@ The following are not required for MVP recovery and SHOULD be deferred:
 
 ### 10.1 ERC-8004 Agent Identity
 
-ClawVault agents SHOULD be registered on the ERC-8004 identity registry on **the home chain** (the chain selected during setup). ERC-8004 registries are deployed as per-chain singletons — there is no requirement to use Ethereum L1 specifically.
+Monolith agents SHOULD be registered on the ERC-8004 identity registry on **the home chain** (the chain selected during setup). ERC-8004 registries are deployed as per-chain singletons — there is no requirement to use Ethereum L1 specifically.
 
 - If the user chose **Base**, the agent registers on the Base ERC-8004 registry. The wallet contract exists on Base and can satisfy ERC-1271 signature verification natively.
 - If the user chose **Ethereum L1**, the agent registers on the L1 ERC-8004 registry.
@@ -587,7 +587,7 @@ Registration provides:
 
 ### 10.2 ENS Integration
 
-Agents SHOULD be able to register or link an ENS name (e.g., `mybot.eth` or `mybot.clawvault.eth`). The ENS profile includes:
+Agents SHOULD be able to register or link an ENS name (e.g., `mybot.eth` or `mybot.monolith.eth`). The ENS profile includes:
 
 - Primary wallet address (resolver record).
 - Avatar / PFP (via avatar record).
@@ -648,7 +648,7 @@ The end-to-end transaction flow, for reference:
 
 On startup, the daemon:
 
-1. Creates `~/.clawvault/` with `0700` permissions (owner-only, no group/other access).
+1. Creates `~/.monolith/` with `0700` permissions (owner-only, no group/other access).
 2. Uses `lstat()` to verify `daemon.sock` is not a symlink or unexpected file type.
 3. Safely deletes any stale socket.
 4. Binds the new socket with `0600` permissions.
@@ -763,7 +763,7 @@ Full address list maintained as a data file in the daemon repository.
 
 ### Bidirectional XPC Architecture
 
-The daemon registers as a Mach service via `NSXPCListener(machServiceName: "com.clawvault.daemon")`. The companion connects using `NSXPCConnection(machServiceName: "com.clawvault.daemon")`.
+The daemon registers as a Mach service via `NSXPCListener(machServiceName: "com.monolith.daemon")`. The companion connects using `NSXPCConnection(machServiceName: "com.monolith.daemon")`.
 
 **Two protocols:**
 - `DaemonXPCProtocol` (companion → daemon): `listPendingApprovals()`, `ping()`
@@ -775,18 +775,18 @@ The companion sets its `exportedInterface` to `CompanionCallbackProtocol` and it
 
 In `shouldAcceptNewConnection`, the daemon MUST verify the connecting process is the real companion app:
 
-- **Release builds:** Extract audit token, verify `bundleIdentifier == "com.clawvault.companion"` AND `teamIdentifier == <Developer ID team>` via `SecCodeCheckValidity`. Reject all others.
-- **Debug builds (`#if DEBUG`):** Accept ad-hoc signed binaries only if `~/.clawvault/dev-mode` flag file exists. The `#if DEBUG` guard is compile-time so this relaxation cannot ship in release.
+- **Release builds:** Extract audit token, verify `bundleIdentifier == "com.monolith.companion"` AND `teamIdentifier == <Developer ID team>` via `SecCodeCheckValidity`. Reject all others.
+- **Debug builds (`#if DEBUG`):** Accept ad-hoc signed binaries only if `~/.monolith/dev-mode` flag file exists. The `#if DEBUG` guard is compile-time so this relaxation cannot ship in release.
 
 This prevents the untrusted skill/LLM (which runs as the same OS user) from connecting to the daemon XPC, reading approval codes, or spoofing callbacks.
 
 ### LaunchAgent Requirement
 
-The daemon plist at `~/Library/LaunchAgents/com.clawvault.daemon.plist` MUST contain:
+The daemon plist at `~/Library/LaunchAgents/com.monolith.daemon.plist` MUST contain:
 ```xml
 <key>MachServices</key>
 <dict>
-    <key>com.clawvault.daemon</key>
+    <key>com.monolith.daemon</key>
     <true/>
 </dict>
 ```
@@ -798,7 +798,7 @@ Without this, XPC Mach service discovery will not work.
 
 ### SE-Signed Configuration
 
-The daemon config at `~/.clawvault/config.json` is signed with the Secure Enclave signing key. The SE private key is non-extractable, so the untrusted skill cannot forge signatures.
+The daemon config at `~/.monolith/config.json` is signed with the Secure Enclave signing key. The SE private key is non-extractable, so the untrusted skill cannot forge signatures.
 
 - **Save:** Serialize config JSON → sign raw bytes with SE signing key → write `config.json` + `config.sig` (raw P-256 signature)
 - **Load:** Read raw bytes of `config.json` from disk + read `config.sig` → verify signature against SE public key over the exact raw bytes (never re-serialize before verifying). If mismatch → return `nil`
@@ -843,7 +843,7 @@ This ad-hoc signs the binary with the required `keychain-access-groups` entitlem
 To enable relaxed XPC validation in debug builds (accept ad-hoc connections without team ID verification):
 
 ```bash
-touch ~/.clawvault/dev-mode
+touch ~/.monolith/dev-mode
 ```
 
 This flag is checked only in `#if DEBUG` builds. Without it, even debug builds reject non-companion XPC connections.
@@ -851,6 +851,6 @@ This flag is checked only in `#if DEBUG` builds. Without it, even debug builds r
 ### LaunchAgent Installation
 
 ```bash
-cp daemon/com.clawvault.daemon.plist ~/Library/LaunchAgents/
-launchctl load ~/Library/LaunchAgents/com.clawvault.daemon.plist
+cp daemon/com.monolith.daemon.plist ~/Library/LaunchAgents/
+launchctl load ~/Library/LaunchAgents/com.monolith.daemon.plist
 ```

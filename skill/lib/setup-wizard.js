@@ -2,7 +2,7 @@ import { daemon } from './daemon-client.js';
 import { attemptRuntimeBootstrap } from './runtime-bootstrap.js';
 
 /**
- * Setup flow for ClawVault (per spec §3.2).
+ * Setup flow for Monolith (per spec §3.2).
  * The skill presents status; the actual interactive flow (chain selection,
  * profile selection, etc.) happens through the daemon's setup/config endpoints.
  */
@@ -38,9 +38,9 @@ async function waitForHealthyDaemon(maxAttempts = 10, delayMs = 400) {
 }
 
 function buildBootstrapFailureMessage(bootstrap) {
-  const base = 'The ClawVault daemon is not running and auto-start failed.';
+  const base = 'The Monolith daemon is not running and auto-start failed.';
   if (!bootstrap?.messages?.length) {
-    return `${base} Install ClawVaultDaemon.pkg, then run setup again.`;
+    return `${base} Install MonolithDaemon.pkg, then run setup again.`;
   }
   return `${base} ${bootstrap.messages.join(' ')}`;
 }

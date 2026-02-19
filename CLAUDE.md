@@ -1,4 +1,4 @@
-# ClawVault
+# Monolith
 
 Secure crypto wallet skill for OpenClaw agents. Hardware-isolated keys (Apple Secure Enclave), on-chain spending caps, ERC-4337 smart wallet.
 
@@ -55,7 +55,7 @@ docs/             Architecture docs
 
 ## Daemon Socket Protocol
 
-- Socket: `~/.clawvault/daemon.sock` (0600, directory 0700)
+- Socket: `~/.monolith/daemon.sock` (0600, directory 0700)
 - Auth: peer UID check only (same OS user). No HMAC, no shared secrets.
 - Admin actions (`/policy/update`, `/allowlist`, `/unfreeze`): daemon sends XPC callback to companion → companion shows SwiftUI sheet + Touch ID → result returned. Companion not connected → 503.
 
@@ -104,5 +104,5 @@ Two built-in profiles configured at setup. Limits are identical across chains.
 - **Codesign after build:** Every `swift build` strips signature. Run `scripts/codesign-dev.sh` after building for SE access.
 - **Companion required for admin/approval:** `/policy/update`, `/allowlist`, `/unfreeze` need companion running. `/sign` requiring approval also needs companion. Routine `/sign` within policy works without companion.
 - **On-chain freeze sync is one-way:** On-chain freeze forces local freeze. Local unfreeze requires explicit `/unfreeze` after on-chain unfreeze.
-- **Config edits trigger safe mode:** Manual edits to `~/.clawvault/config.json` invalidate the SE signature → daemon starts frozen.
-- **LaunchAgent plist required for XPC:** `com.clawvault.daemon.plist` must be in `~/Library/LaunchAgents/` with `MachServices` dictionary for XPC to work.
+- **Config edits trigger safe mode:** Manual edits to `~/.monolith/config.json` invalidate the SE signature → daemon starts frozen.
+- **LaunchAgent plist required for XPC:** `com.monolith.daemon.plist` must be in `~/Library/LaunchAgents/` with `MachServices` dictionary for XPC to work.

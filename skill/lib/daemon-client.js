@@ -2,7 +2,7 @@ import net from 'node:net';
 import { SOCKET_PATH } from './constants.js';
 
 /**
- * Unix socket HTTP client for the ClawVault daemon.
+ * Unix socket HTTP client for the Monolith daemon.
  */
 export class DaemonClient {
   constructor(socketPath = SOCKET_PATH) {
@@ -55,7 +55,7 @@ export class DaemonClient {
         if (err.code === 'ENOENT') {
           reject(
             new Error(
-              'Daemon not running. Start the ClawVault daemon first.'
+              'Daemon not running. Start the Monolith daemon first.'
             )
           );
         } else if (err.code === 'ECONNREFUSED') {

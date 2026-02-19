@@ -1,7 +1,7 @@
 import { runSetupWizard, initializeWallet, deployWallet } from '../lib/setup-wizard.js';
 
 /**
- * Run the ClawVault setup wizard and print status.
+ * Run the Monolith setup wizard and print status.
  * Usage: node scripts/setup.js
  */
 async function main() {

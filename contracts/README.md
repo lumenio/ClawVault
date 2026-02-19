@@ -1,4 +1,4 @@
-# ClawVault Contracts
+# Monolith Contracts
 
 ERC-4337 smart wallet with P-256 signature verification, on-chain spending caps, and recovery module.
 
@@ -6,8 +6,8 @@ ERC-4337 smart wallet with P-256 signature verification, on-chain spending caps,
 
 | Contract | Description |
 |---|---|
-| `ClawVaultWallet.sol` | Core wallet. Single P-256 owner, `validateUserOp` with precompile/fallback sig verification, daily spending caps, freeze/recovery. |
-| `ClawVaultFactory.sol` | CREATE2 deterministic deployment. ERC-4337 `initCode` compatible. |
+| `MonolithWallet.sol` | Core wallet. Single P-256 owner, `validateUserOp` with precompile/fallback sig verification, daily spending caps, freeze/recovery. |
+| `MonolithFactory.sol` | CREATE2 deterministic deployment. ERC-4337 `initCode` compatible. |
 | `P256Verifier.sol` | Wrapper that tries the precompile at `0x100` first (EIP-7951 / RIP-7212), falls back to Daimo's `P256Verifier`. |
 
 ## Build

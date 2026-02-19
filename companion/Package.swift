@@ -2,15 +2,15 @@
 import PackageDescription
 
 let package = Package(
-    name: "ClawVaultCompanion",
+    name: "MonolithCompanion",
     platforms: [
         .macOS(.v14)
     ],
     targets: [
         .executableTarget(
-            name: "ClawVaultCompanion",
-            path: "ClawVaultCompanion",
-            exclude: ["Resources/Info.plist", "Resources/ClawVaultCompanion.entitlements"],
+            name: "MonolithCompanion",
+            path: "MonolithCompanion",
+            exclude: ["Resources/Info.plist", "Resources/MonolithCompanion.entitlements"],
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
     ]

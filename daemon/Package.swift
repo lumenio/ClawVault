@@ -3,20 +3,20 @@
 import PackageDescription
 
 let package = Package(
-    name: "ClawVaultDaemon",
+    name: "MonolithDaemon",
     platforms: [
         .macOS(.v14)
     ],
     targets: [
         .executableTarget(
-            name: "ClawVaultDaemon",
-            path: "Sources/ClawVaultDaemon",
+            name: "MonolithDaemon",
+            path: "Sources/MonolithDaemon",
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
         .testTarget(
-            name: "ClawVaultDaemonTests",
-            dependencies: ["ClawVaultDaemon"],
-            path: "Tests/ClawVaultDaemonTests",
+            name: "MonolithDaemonTests",
+            dependencies: ["MonolithDaemon"],
+            path: "Tests/MonolithDaemonTests",
             swiftSettings: [.swiftLanguageMode(.v5)]
         ),
     ]

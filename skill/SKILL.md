@@ -1,12 +1,12 @@
 ---
-name: clawvault
+name: monolith
 description: Production-ready OpenClaw crypto wallet with Secure Enclave signing, policy-based autopilot, and human approvals for risky actions.
-metadata: {"openclaw":{"displayName":"ClawVault","source":"https://github.com/lumenio/ClawVault/tree/main/skill","homepage":"https://github.com/lumenio/ClawVault","requires":{"bins":["ClawVaultDaemon"]},"install":[{"kind":"download","label":"Install ClawVault Daemon (macOS pkg)","url":"https://github.com/lumenio/ClawVault/releases/download/v0.1.1/ClawVaultDaemon-v0.1.1.pkg","os":"darwin"},{"kind":"download","label":"Download ClawVault Companion (macOS app zip)","url":"https://github.com/lumenio/ClawVault/releases/download/v0.1.0/ClawVaultCompanion.app.zip","os":"darwin"}]}}
+metadata: {"openclaw":{"displayName":"Monolith","source":"https://github.com/slaviquee/monolith/tree/main/skill","homepage":"https://github.com/slaviquee/monolith","requires":{"bins":["MonolithDaemon"]},"install":[{"kind":"download","label":"Install Monolith Daemon (macOS pkg)","url":"https://github.com/slaviquee/monolith/releases/download/v0.1.1/MonolithDaemon-v0.1.1.pkg","os":"darwin"},{"kind":"download","label":"Download Monolith Companion (macOS app zip)","url":"https://github.com/slaviquee/monolith/releases/download/v0.1.0/MonolithCompanion.app.zip","os":"darwin"}]}}
 ---
 
-# ClawVault — Crypto Wallet Skill
+# Monolith — Crypto Wallet Skill
 
-Secure crypto wallet for OpenClaw agents. ClawVault combines hardware-isolated keys (Apple Secure Enclave), on-chain spending controls, and policy-gated approvals so agents can transact safely without exposing private keys.
+Secure crypto wallet for OpenClaw agents. Monolith combines hardware-isolated keys (Apple Secure Enclave), on-chain spending controls, and policy-gated approvals so agents can transact safely without exposing private keys.
 
 ## Commands
 
@@ -52,9 +52,9 @@ Secure crypto wallet for OpenClaw agents. ClawVault combines hardware-isolated k
 
 ## Setup
 
-1. Install ClawVault from ClawHub (macOS install entries provide daemon + companion downloads)
-2. Run `clawvault setup` to auto-start daemon/companion and verify wallet status
-3. If setup reports missing local components, install `ClawVaultDaemon.pkg` and `ClawVaultCompanion.app` from the release assets
+1. Install Monolith from ClawHub (macOS install entries provide daemon + companion downloads)
+2. Run `monolith setup` to auto-start daemon/companion and verify wallet status
+3. If setup reports missing local components, install `MonolithDaemon.pkg` and `MonolithCompanion.app` from the release assets
 4. Fund the wallet address with ETH on your chosen chain
 5. Start transacting
 

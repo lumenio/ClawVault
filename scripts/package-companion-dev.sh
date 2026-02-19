@@ -14,9 +14,9 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$SCRIPT_DIR/.."
 COMPANION_DIR="$REPO_ROOT/companion"
 
-BINARY="$COMPANION_DIR/.build/debug/ClawVaultCompanion"
-INFO_PLIST="$COMPANION_DIR/ClawVaultCompanion/Resources/Info.plist"
-APP_BUNDLE="$COMPANION_DIR/.build/debug/ClawVaultCompanion.app"
+BINARY="$COMPANION_DIR/.build/debug/MonolithCompanion"
+INFO_PLIST="$COMPANION_DIR/MonolithCompanion/Resources/Info.plist"
+APP_BUNDLE="$COMPANION_DIR/.build/debug/MonolithCompanion.app"
 
 if [ ! -f "$BINARY" ]; then
     echo "ERROR: Companion binary not found at $BINARY"
@@ -30,9 +30,9 @@ if [ ! -f "$INFO_PLIST" ]; then
 fi
 
 mkdir -p "$APP_BUNDLE/Contents/MacOS" "$APP_BUNDLE/Contents/Resources"
-cp "$BINARY" "$APP_BUNDLE/Contents/MacOS/ClawVaultCompanion"
+cp "$BINARY" "$APP_BUNDLE/Contents/MacOS/MonolithCompanion"
 cp "$INFO_PLIST" "$APP_BUNDLE/Contents/Info.plist"
-chmod +x "$APP_BUNDLE/Contents/MacOS/ClawVaultCompanion"
+chmod +x "$APP_BUNDLE/Contents/MacOS/MonolithCompanion"
 
 echo "Ad-hoc signing app bundle..."
 codesign --force --deep --sign - "$APP_BUNDLE"

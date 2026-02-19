@@ -1,7 +1,7 @@
 ---
 name: monolith
 description: Production-ready OpenClaw crypto wallet with Secure Enclave signing, policy-based autopilot, and human approvals for risky actions.
-metadata: {"openclaw":{"displayName":"Monolith","source":"https://github.com/slaviquee/monolith/tree/main/skill","homepage":"https://github.com/slaviquee/monolith","requires":{"bins":["MonolithDaemon"]},"install":[{"kind":"download","label":"Install Monolith Daemon (macOS pkg)","url":"https://github.com/slaviquee/monolith/releases/download/v0.1.1/MonolithDaemon-v0.1.1.pkg","os":"darwin"},{"kind":"download","label":"Download Monolith Companion (macOS app zip)","url":"https://github.com/slaviquee/monolith/releases/download/v0.1.0/MonolithCompanion.app.zip","os":"darwin"}]}}
+metadata: {"openclaw":{"displayName":"Monolith","source":"https://github.com/slaviquee/monolith/tree/main/skill","homepage":"https://github.com/slaviquee/monolith","requires":{"bins":["MonolithDaemon"]},"install":[{"kind":"download","label":"Install Monolith Daemon (macOS pkg)","url":"https://github.com/slaviquee/monolith/releases/download/v0.1.1/MonolithDaemon-v0.1.1.pkg","os":"darwin"},{"kind":"download","label":"Download Monolith Companion (macOS app zip)","url":"https://github.com/slaviquee/monolith/releases/download/v0.1.1/MonolithCompanion.app.zip","os":"darwin"}]}}
 ---
 
 # Monolith — Crypto Wallet Skill
